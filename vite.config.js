@@ -5,7 +5,7 @@ import vue from '@vitejs/plugin-vue';
 
 // https://vite.dev/config/
 export default defineConfig({
-  base: '/Coc_scraper/', // Updated base path for GitHub Pages deployment
+  base: '/CoC_scraper/', // Updated to match exact capitalization of repository name
   plugins: [
     vue(),
   ],

@@ -115,30 +115,25 @@ export default {
       this.error = null;
       this.businesses = [];
 
-      // Try each proxy in sequence until one works
-      const proxies = [config.corsProxy, ...config.alternateProxies];
-      let success = false;
-      let lastError = null;
+      // Generate the target URL
+      const baseUrl = config.apiBaseUrls.wilmington.replace(/\/$/, '');
+      const targetUrl = `${baseUrl}/list/search?q=${encodeURIComponent(this.searchTerm)}&c=&sa=False`;
+      
+      // Use the allorigins.win service with JSON output format
+      // This approach avoids CORS issues since it returns JSON with the contents
+      const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
+      
+      console.log("Generated URL:", proxyUrl);
 
-      for (let i = 0; i < proxies.length && !success; i++) {
-        const currentProxy = proxies[i];
-        console.log(`Attempting with proxy ${i+1}/${proxies.length}: ${currentProxy}`);
+      try {
+        console.log("Sending request to:", proxyUrl);
+        const response = await axios.get(proxyUrl);
+        console.log("Response received:", response.status);
         
-        const baseUrl = config.apiBaseUrls.wilmington.replace(/\/$/, '');
-        const searchUrl = `${currentProxy}${encodeURIComponent(baseUrl + '/list/search?q=' + encodeURIComponent(this.searchTerm) + '&c=&sa=False')}`;
-        
-        console.log("Generated URL:", searchUrl);
-
-        try {
-          console.log("Sending request to:", searchUrl);
-          // Remove custom headers that trigger CORS preflight
-          const searchResponse = await axios.get(searchUrl, {
-            timeout: 10000
-          });
-          
-          console.log("Response received:", searchResponse.status);
-          
-          const $ = cheerio.load(searchResponse.data);
+        // Check if we have a valid response
+        if (response.data && response.data.contents) {
+          // Load the HTML content from the JSON response
+          const $ = cheerio.load(response.data.contents);
           console.log("HTML loaded with cheerio");
 
           // Collect business info
@@ -226,26 +221,24 @@ export default {
           if (businessesBasicInfo.length > 0) {
             // Set businesses with the data we've extracted
             this.businesses = businessesBasicInfo;
-            success = true;
-            break; // Exit the proxy loop since we found a working proxy
           } else {
-            console.log("No businesses found, trying next proxy...");
+            this.error = "No businesses found matching your search term.";
+            console.log("No businesses found in the search results.");
           }
-
-        } catch (err) {
-          lastError = err;
-          console.error(`Error with proxy ${currentProxy}:`, err);
-          // Continue to next proxy
+        } else {
+          this.error = "Error processing the response from the server.";
+          console.error("Invalid response format:", response.data);
         }
+      } catch (err) {
+        this.error = "Failed to fetch data. Please try again later.";
+        console.error("Error fetching data:", err);
+        if (err.response) {
+          console.error("Response status:", err.response.status);
+          console.error("Response data:", err.response.data);
+        }
+      } finally {
+        this.loading = false;
       }
-
-      // If all proxies failed, show an error
-      if (!success) {
-        this.error = "Failed to fetch data after trying all available proxies. Please try again later.";
-        console.error("All proxies failed. Last error:", lastError);
-      }
-      
-      this.loading = false;
     },
 
     resetSearch() {

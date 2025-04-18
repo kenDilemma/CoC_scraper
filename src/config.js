@@ -24,7 +24,11 @@ const config = {
     'https://corsproxy.io/?',
     'https://cors-anywhere.herokuapp.com/',
     'https://api.codetabs.com/v1/proxy?quest='
-  ]
+  ],
+  
+  // New JSONP service that avoids CORS issues
+  jsonpService: 'https://api.allorigins.win/get?url=',
+  jsonpCallback: '&callback=handleJSONP'
 };
 
 export default config;

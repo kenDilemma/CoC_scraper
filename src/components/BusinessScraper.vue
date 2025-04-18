@@ -232,9 +232,44 @@ export default {
           });
         });
 
-        console.log(`Found ${businessesBasicInfo.length} businesses. Fetching individual pages...`);
+        console.log(`Found ${businessesBasicInfo.length} businesses.`);
         
-        // Step 2: For each business, fetch its individual page and extract the actual website URL
+        /* 
+         * Due to CORS restrictions in the browser when deployed to GitHub Pages,
+         * we'll switch our approach: instead of trying to fetch each individual business page
+         * (which will fail with CORS errors), we'll just display the data we already have
+         * from the search results page.
+         */
+        this.businesses = businessesBasicInfo.map(business => ({
+          ...business,
+          website: "n/a" // We can't reliably fetch website URLs due to CORS restrictions
+        }));
+
+        // Only attempt to fetch individual business pages when running in development mode
+        if (!import.meta.env.PROD) {
+          console.log("In development mode. Attempting to fetch individual business pages...");
+          // Create a non-blocking async function to fetch additional details
+          this.fetchIndividualBusinessPages(businessesBasicInfo);
+        }
+
+      } catch (err) {
+        this.error = "Failed to fetch data. Please try again.";
+        console.error("Error fetching data:", err);
+        if (err.response) {
+          console.error("Response status:", err.response.status);
+          console.error("Response data:", err.response.data);
+        }
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    /**
+     * Attempts to fetch individual business pages for additional details.
+     * Only called in development mode to avoid CORS errors in production.
+     */
+    async fetchIndividualBusinessPages(businessesBasicInfo) {
+      try {
         const promises = businessesBasicInfo.map(async (business) => {
           console.log(`Fetching individual page for ${business.name}: ${business.cocPageUrl}`);
           try {
@@ -273,46 +308,34 @@ export default {
               }
             }
             
+            // Update the business in our existing array if we found a website
+            if (found && websiteUrl !== "n/a") {
+              const index = this.businesses.findIndex(b => b.name === business.name);
+              if (index !== -1) {
+                this.businesses[index].website = websiteUrl;
+              }
+            }
+            
             return {
-              ...business,
-              website: websiteUrl,
+              name: business.name,
+              website: websiteUrl
             };
           } catch (err) {
-            // Don't show error in console for production builds - we'll handle errors gracefully
-            if (!import.meta.env.PROD) {
-              console.error(`Error fetching page for ${business.name}:`, err);
-            }
+            // Don't log errors in development mode - handled gracefully
             return {
-              ...business,
-              website: "n/a", // More user-friendly error message
+              name: business.name,
+              website: "n/a"
             };
           }
         });
         
-        try {
-          this.businesses = await Promise.all(promises);
-          console.log("All individual business pages processed");
-        } catch (err) {
-          // Handle any errors in the Promise.all
-          console.error("Error processing business pages:", err);
-          // Still show the businesses we have, even if some failed
-          this.businesses = businessesBasicInfo.map(business => ({
-            ...business,
-            website: "n/a"
-          }));
-        }
-
-      } catch (err) {
-        this.error = "Failed to fetch data. Please try again.";
-        console.error("Error fetching data:", err);
-        if (err.response) {
-          console.error("Response status:", err.response.status);
-          console.error("Response data:", err.response.data);
-        }
-      } finally {
-        this.loading = false;
+        const results = await Promise.all(promises);
+        console.log("All individual business pages processed");
+      } catch (error) {
+        console.log("Error processing individual business pages:", error);
       }
     },
+
     resetSearch() {
       this.businesses = [];
       this.searchTerm = "";

@@ -130,8 +130,8 @@ export default {
 
       // Use a CORS proxy to avoid CORS issues
       const corsProxy = "https://corsproxy.io/?";
-      // Use the config for the base URL
-      const baseUrl = config.apiBaseUrls.wilmington;
+      // Use the config for the base URL without a trailing slash
+      const baseUrl = config.apiBaseUrls.wilmington.replace(/\/$/, '');
       const searchUrl = `${corsProxy}${baseUrl}/list/search?q=${encodeURIComponent(this.searchTerm)}&c=&sa=False`;
 
       console.log("Generated URL:", searchUrl);
@@ -155,7 +155,11 @@ export default {
           
           // Function to process URLs based on environment
           const processUrl = (url) => {
-            // Add CORS proxy to all URLs
+            // Don't add CORS proxy if it's already there
+            if (url.startsWith('https://corsproxy.io/?')) {
+              return url;
+            }
+            // Add CORS proxy to URLs
             if (url.startsWith('http://') || url.startsWith('https://')) {
               return `${corsProxy}${url}`;
             } else if (url.startsWith('/')) {
@@ -313,8 +317,10 @@ export default {
               // Add a short delay between requests to avoid triggering anti-scraping measures
               await new Promise(resolve => setTimeout(resolve, 1000));
               
-              // The cocPageUrl should already include the CORS proxy from earlier processing
-              const response = await axios.get(business.cocPageUrl, { 
+              // Check if the URL already has the CORS proxy and use it directly if so
+              const requestUrl = business.cocPageUrl;
+              
+              const response = await axios.get(requestUrl, { 
                 timeout: 10000,
                 headers: {
                   'Accept': 'text/html,application/xhtml+xml,application/xml',

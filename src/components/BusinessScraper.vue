@@ -131,11 +131,8 @@ export default {
 
         try {
           console.log("Sending request to:", searchUrl);
+          // Remove custom headers that trigger CORS preflight
           const searchResponse = await axios.get(searchUrl, {
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-            },
-            // Shorter timeout to quickly try other proxies if one fails
             timeout: 10000
           });
           

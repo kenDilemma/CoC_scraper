@@ -12,7 +12,8 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger('business-scraper')
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
+# Configure CORS to allow requests from any origin with proper methods and headers
+CORS(app, resources={r"/*": {"origins": "*", "methods": ["GET", "POST", "OPTIONS"], "allow_headers": ["Content-Type", "Authorization"]}})
 
 # Headers to make our requests look more like a regular browser
 HEADERS = {

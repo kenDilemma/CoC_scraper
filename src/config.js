@@ -1,15 +1,27 @@
-// Configuration for different environments
+// Configuration file for the CoC scraper
+// This file contains environment-specific configurations
+
+// Function to determine if we're in production (GitHub Pages) or development
+const isProd = () => {
+  return import.meta.env.PROD;
+};
 
 const config = {
-  // In development mode (local), use the proxy defined in vite.config.js
+  // Base API URLs for the chambers of commerce
   apiBaseUrls: {
-    wilmington: import.meta.env.PROD 
-      ? 'https://corsproxy.io/?https://www.wilmingtonchamber.org' 
+    // For Wilmington Chamber of Commerce
+    wilmington: isProd()
+      ? 'https://corsproxy.io/?https://www.wilmingtonchamber.org'
       : '/api/wilmington',
-    dayton: import.meta.env.PROD 
-      ? 'https://corsproxy.io/?https://daytonareachamberofcommerce.growthzoneapp.com' 
-      : '/api/dayton'
-  }
+    
+    // For Dayton Chamber of Commerce
+    dayton: isProd()
+      ? 'https://corsproxy.io/?https://www.daytonareachamberofcommerce.growthzoneapp.com'
+      : '/api/dayton',
+  },
+
+  // CORS proxy configuration
+  corsProxy: 'https://corsproxy.io/?',
 };
 
 export default config;

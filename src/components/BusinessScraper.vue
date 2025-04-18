@@ -275,23 +275,28 @@ export default {
               let businessPageUrl = business.cocPageUrl;
               
               // In production, make sure we're using the CORS proxy
-              if (import.meta.env.PROD) {
-                // For Wilmington Chamber of Commerce URLs
-                if (businessPageUrl.includes('wilmingtonchamber.org')) {
-                  // Apply the CORS proxy
-                  businessPageUrl = `https://corsproxy.io/?${encodeURIComponent(businessPageUrl)}`;
+              if (import.meta.env.PROD && !businessPageUrl.includes('corsproxy.io')) {
+                // For full URLs, apply CORS proxy directly
+                if (businessPageUrl.includes('http')) {
+                  businessPageUrl = `${config.corsProxy}${encodeURIComponent(businessPageUrl)}`;
+                } 
+                // For URLs that already include the base URL but not the proxy
+                else if (businessPageUrl.includes('wilmingtonchamber.org')) {
+                  businessPageUrl = `${config.corsProxy}${encodeURIComponent(businessPageUrl)}`;
                 }
                 // For relative URLs, convert to absolute with CORS proxy
-                else if (businessPageUrl.startsWith('/')) {
-                  const fullUrl = `https://www.wilmingtonchamber.org${businessPageUrl}`;
-                  businessPageUrl = `https://corsproxy.io/?${encodeURIComponent(fullUrl)}`;
+                else {
+                  const fullUrl = `https://www.wilmingtonchamber.org${businessPageUrl.startsWith('/') ? businessPageUrl : '/' + businessPageUrl}`;
+                  businessPageUrl = `${config.corsProxy}${encodeURIComponent(fullUrl)}`;
                 }
+                
+                console.log("Applied CORS proxy. New URL:", businessPageUrl);
               }
               
               console.log(`Fetching individual page for ${business.name}: ${businessPageUrl}`);
               
-              // Make request to the individual business page
-              const businessPageResponse = await axios.get(businessPageUrl);
+              // Make request to the individual business page with longer timeout
+              const businessPageResponse = await axios.get(businessPageUrl, { timeout: 10000 });
               const pageHtml = businessPageResponse.data;
               const businessPage$ = cheerio.load(pageHtml);
               
@@ -350,7 +355,7 @@ export default {
           console.log(`Processed batch ${Math.min(i + batchSize, totalBusinesses)}/${totalBusinesses}`);
           
           // Small delay between batches to avoid rate limiting
-          await new Promise(resolve => setTimeout(resolve, 500));
+          await new Promise(resolve => setTimeout(resolve, 1000));
           
         } catch (error) {
           console.log(`Error processing batch ${i}-${i+batchSize}:`, error);

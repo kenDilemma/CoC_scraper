@@ -1,108 +1,106 @@
 import requests
 from bs4 import BeautifulSoup
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+import re
+import time
+import random
+import logging
 
-# Function to fetch the company website URL from the COC page
-def fetch_company_website(coc_url):
+# Set up logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger('business-scraper')
+
+app = Flask(__name__)
+CORS(app)  # Enable CORS for all routes
+
+# Headers to make our requests look more like a regular browser
+HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.5',
+    'Referer': 'https://www.wilmingtonchamber.org/',
+    'Connection': 'keep-alive',
+    'Upgrade-Insecure-Requests': '1',
+    'DNT': '1',  # Do Not Track
+    'Cache-Control': 'max-age=0',
+}
+
+# Cache for storing website URLs to reduce repeated requests
+website_cache = {}
+
+@app.route('/api/fetch-website', methods=['GET'])
+def fetch_website():
+    """
+    Endpoint to fetch a business website URL from its Chamber of Commerce page.
+    Query parameters:
+    - url: The URL of the business's CoC page
+    - name: The business name for logging and cache purposes
+    """
+    coc_url = request.args.get('url')
+    business_name = request.args.get('name', 'Unknown business')
+    
+    if not coc_url:
+        return jsonify({'error': 'No URL provided'}), 400
+        
+    # Check cache first
+    if coc_url in website_cache:
+        logger.info(f"Cache hit for {business_name}: {website_cache[coc_url]}")
+        return jsonify({'website': website_cache[coc_url]})
+    
+    logger.info(f"Fetching website for {business_name} from {coc_url}")
+    
     try:
-        response = requests.get(coc_url)
+        # Add a random delay to avoid triggering anti-scraping measures
+        time.sleep(random.uniform(1, 3))
+        
+        # Make request to the business page
+        response = requests.get(coc_url, headers=HEADERS, timeout=10)
+        
         if response.status_code != 200:
-            return "Company website not available"
+            logger.error(f"Failed to fetch {coc_url}: Status code {response.status_code}")
+            return jsonify({'error': f'Failed to fetch page: {response.status_code}'}), 500
+            
+        # Parse the HTML
+        soup = BeautifulSoup(response.text, 'html.parser')
+        website_url = "n/a"
+        found = False
         
-        soup = BeautifulSoup(response.content, "html.parser")
+        # Strategy 1: Look for links with website indicators in text or aria-label
+        website_indicators = ["website", "visit site", "view site", "web", "site", "view our site"]
+        for link in soup.find_all('a'):
+            link_text = link.get_text().strip().lower()
+            aria_label = link.get('aria-label', '').lower()
+            href = link.get('href')
+            
+            if href and any(indicator in link_text or indicator in aria_label for indicator in website_indicators):
+                website_url = href
+                found = True
+                logger.info(f"Found website for {business_name} via text matching: {website_url}")
+                break
+                
+        # Strategy 2: Look for any external URLs that aren't social media or maps
+        if not found:
+            for link in soup.find_all('a'):
+                href = link.get('href', '')
+                if re.match(r'^https?://', href) and \
+                   not any(domain in href for domain in ['google.com/maps', 'facebook.com', 'twitter.com',
+                                                         'instagram.com', 'linkedin.com', 'youtube.com', 
+                                                         'wilmingtonchamber.org']):
+                    website_url = href
+                    found = True
+                    logger.info(f"Found likely website URL for {business_name}: {website_url}")
+                    break
         
-        # Look for the company website URL (adjusted to search for class "card-link")
-        website_element = soup.find("a", class_="card-link")
-        if website_element and "href" in website_element.attrs:
-            return website_element["href"]
-        else:
-            return "Company website not available"
+        # Cache the result
+        website_cache[coc_url] = website_url
+        
+        return jsonify({'website': website_url})
+        
     except Exception as e:
-        return f"Error fetching website: {e}"
+        logger.error(f"Error fetching website for {business_name}: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
-# Send request to the search page
-url = "https://www.wilmingtonchamber.org/list/search?q=design&c=&sa=False"
-response = requests.get(url)
-
-# Check if the request was successful
-if response.status_code != 200:
-    print(f"Failed to retrieve the webpage. Status code: {response.status_code}")
-    exit(1)
-
-# Parse HTML response
-soup = BeautifulSoup(response.content, "html.parser")
-
-# Find all <h5> tags with the class "card-title"
-business_listings = soup.find_all("h5", class_="card-title")
-
-# Extract business information
-businesses = []
-for listing in business_listings:
-    # Find the <a> tag inside the <h5>
-    business_name_element = listing.find("a")
-    if not business_name_element:
-        print("Business name <a> tag not found. Skipping...")
-        continue
-
-    # Extract the business name and URL
-    business_name = business_name_element.text.strip()
-    business_link = business_name_element["href"]
-
-    # Extract address and phone number
-    parent_div = listing.find_parent("div", class_="gz-list-card-wrapper")
-    if not parent_div:
-        print(f"Parent div not found for {business_name}. Skipping...")
-        continue
-
-    # Extract address
-    address = parent_div.find("li", class_="gz-card-address")
-    if address:
-        # Extract street address
-        street_addresses = address.find_all("span", class_="gz-street-address")
-        street_address_text = ", ".join([span.get_text(strip=True) for span in street_addresses])
-
-        # Extract city, state, and zip
-        city_state_zip = address.find("div", itemprop="citystatezip")
-        if city_state_zip:
-            city = city_state_zip.find("span", class_="gz-address-city")
-            state = city_state_zip.find_all("span")[1] if len(city_state_zip.find_all("span")) > 1 else None
-            zip_code = city_state_zip.find_all("span")[2] if len(city_state_zip.find_all("span")) > 2 else None
-
-            city_text = city.get_text(strip=True) if city else "City not available"
-            state_text = state.get_text(strip=True) if state else "State not available"
-            zip_text = zip_code.get_text(strip=True) if zip_code else "Zip not available"
-
-            address_text = f"{street_address_text}\n{city_text}, {state_text} {zip_text}"
-        else:
-            address_text = street_address_text  # Fallback if city/state/zip is missing
-    else:
-        address_text = "Address not available"
-
-    # Extract phone number
-    phone_element = parent_div.find("li", class_="gz-card-phone")
-    if phone_element:
-        phone_number = phone_element.find("a").text.strip()
-    else:
-        phone_number = "Phone number not available"
-
-    # Fetch the actual company website URL
-    company_website = fetch_company_website(business_link)
-
-    # Append the extracted information to the list
-    businesses.append({
-        "Business Name": business_name,
-        "Address": address_text,
-        "Phone Number": phone_number,
-        "Company Website": company_website
-    })
-
-# Write the extracted businesses to a new file
-output_file = "businesses_output.txt"
-with open(output_file, "w", encoding="utf-8") as file:
-    for business in businesses:
-        file.write(f"{business['Business Name']}\n")
-        file.write(f"{business['Address']}\n")
-        file.write(f"{business['Phone Number']}\n")
-        file.write(f"{business['Company Website']}\n")
-        file.write("\n")  # Add a blank line between entries
-
-print(f"Business information has been written to {output_file}")
+if __name__ == '__main__':
+    logger.info("Starting business scraper API on port 5000")
+    app.run(debug=True, port=5000)

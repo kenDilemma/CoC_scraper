@@ -285,9 +285,8 @@ export default {
           ...business
         }));
         
-        // If there are still n/a websites and we want to try fetching individual pages (likely to fail with 403)
-        // Uncomment the below line if you want to try anyway
-        // this.fetchIndividualBusinessPages(businessesBasicInfo);
+        // Fetch websites for businesses that don't have one from the individual pages
+        this.fetchIndividualBusinessPages(businessesBasicInfo);
 
       } catch (err) {
         this.error = "Failed to fetch data. Please try again.";
@@ -299,6 +298,84 @@ export default {
       } finally {
         this.loading = false;
       }
+    },
+
+    async fetchIndividualBusinessPages(businessesBasicInfo) {
+      console.log("Starting to fetch individual business pages...");
+      const batchSize = 3; // Process fewer businesses at once to avoid overwhelming the server
+      const totalBusinesses = businessesBasicInfo.length;
+      let updatedWebsiteCount = 0;
+      
+      // Only process businesses that don't already have a website
+      const businessesWithoutWebsites = businessesBasicInfo.filter(b => b.website === "n/a");
+      console.log(`Found ${businessesWithoutWebsites.length} businesses without websites to process`);
+      
+      if (businessesWithoutWebsites.length === 0) {
+        console.log("All businesses already have websites, no need to fetch individual pages");
+        return;
+      }
+      
+      for (let i = 0; i < businessesWithoutWebsites.length; i += batchSize) {
+        const batch = businessesWithoutWebsites.slice(i, i + batchSize);
+        console.log(`Processing batch ${Math.ceil((i+1)/batchSize)} of ${Math.ceil(businessesWithoutWebsites.length/batchSize)}`);
+        
+        try {
+          // Process each business in parallel within the batch
+          const promises = batch.map(async (business) => {
+            try {
+              console.log(`Fetching website for ${business.name} from ${business.cocPageUrl}`);
+              
+              // Get the real URL without our CORS proxy
+              let realUrl = business.cocPageUrl;
+              if (import.meta.env.PROD) {
+                // In production, the URL might include the CORS proxy, so we need to extract the real URL
+                if (realUrl.includes('corsproxy.io')) {
+                  const encodedUrl = realUrl.split('corsproxy.io/?')[1];
+                  realUrl = decodeURIComponent(encodedUrl);
+                }
+              }
+              
+              // Call our Python API endpoint
+              const apiUrl = `http://localhost:5000/api/fetch-website?url=${encodeURIComponent(realUrl)}&name=${encodeURIComponent(business.name)}`;
+              console.log(`Calling API: ${apiUrl}`);
+              
+              const response = await axios.get(apiUrl, { timeout: 15000 });
+              
+              if (response.data && response.data.website && response.data.website !== "n/a") {
+                // Update the business in our array with the website URL
+                const index = this.businesses.findIndex(b => b.name === business.name);
+                if (index !== -1) {
+                  this.businesses[index].website = response.data.website;
+                  updatedWebsiteCount++;
+                  console.log(`Updated website for ${business.name}: ${response.data.website}`);
+                }
+              }
+              
+              return {
+                name: business.name,
+                website: response.data?.website || "n/a"
+              };
+            } catch (err) {
+              console.log(`Error fetching website for ${business.name}: ${err.message}`);
+              return {
+                name: business.name,
+                website: "n/a"
+              };
+            }
+          });
+          
+          await Promise.all(promises);
+          console.log(`Completed batch ${Math.ceil((i+1)/batchSize)}, updated ${updatedWebsiteCount} websites so far`);
+          
+          // Small delay between batches to avoid overwhelming the server
+          await new Promise(resolve => setTimeout(resolve, 1500));
+          
+        } catch (error) {
+          console.log(`Error processing batch: ${error.message}`);
+        }
+      }
+      
+      console.log(`Finished processing individual business pages. Updated ${updatedWebsiteCount} websites.`);
     },
 
     resetSearch() {

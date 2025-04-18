@@ -16,11 +16,14 @@ const config = {
     dayton: 'https://www.daytonareachamberofcommerce.growthzoneapp.com',
   },
 
-  // CORS proxy configuration
-  corsProxy: 'https://corsproxy.io/?',
+  // CORS proxy configuration - we'll use a more reliable one
+  corsProxy: 'https://api.allorigins.win/raw?url=',
+  
+  // List of backup proxies if the main one fails
   alternateProxies: [
-    'https://api.allorigins.win/raw?url=',
-    'https://corsproxy.io/?'
+    'https://corsproxy.io/?',
+    'https://cors-anywhere.herokuapp.com/',
+    'https://api.codetabs.com/v1/proxy?quest='
   ]
 };
 

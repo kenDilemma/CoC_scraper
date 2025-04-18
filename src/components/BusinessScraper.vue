@@ -115,120 +115,140 @@ export default {
       this.error = null;
       this.businesses = [];
 
-      // Get the base URL from config and add CORS proxy
-      const corsProxy = config.corsProxy;
-      const baseUrl = config.apiBaseUrls.wilmington.replace(/\/$/, '');
-      const searchUrl = `${corsProxy}${baseUrl}/list/search?q=${encodeURIComponent(this.searchTerm)}&c=&sa=False`;
+      // Try each proxy in sequence until one works
+      const proxies = [config.corsProxy, ...config.alternateProxies];
+      let success = false;
+      let lastError = null;
 
-      console.log("Generated URL:", searchUrl);
-
-      try {
-        console.log("Sending request to:", searchUrl);
-        const searchResponse = await axios.get(searchUrl, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-          }
-        });
-        console.log("Response received:", searchResponse.status);
+      for (let i = 0; i < proxies.length && !success; i++) {
+        const currentProxy = proxies[i];
+        console.log(`Attempting with proxy ${i+1}/${proxies.length}: ${currentProxy}`);
         
-        const $ = cheerio.load(searchResponse.data);
-        console.log("HTML loaded with cheerio");
+        const baseUrl = config.apiBaseUrls.wilmington.replace(/\/$/, '');
+        const searchUrl = `${currentProxy}${encodeURIComponent(baseUrl + '/list/search?q=' + encodeURIComponent(this.searchTerm) + '&c=&sa=False')}`;
+        
+        console.log("Generated URL:", searchUrl);
 
-        // Collect business info
-        const businessesBasicInfo = [];
-        $("div.gz-list-card-wrapper").each((_, cardWrapper) => {
-          const cardElement = $(cardWrapper);
-          
-          // Extract name
-          const nameElement = cardElement.find("h5.card-title a");
-          const name = nameElement.text().trim();
-          const businessPageUrl = nameElement.attr("href");
-          
-          // Process the business page URL for the CoC page - don't add proxy
-          let cocPageUrl;
-          
-          // Function to process URLs to get direct chamber URL (without CORS proxy)
-          const processUrl = (url) => {
-            const baseUrl = config.apiBaseUrls.wilmington;
-            
-            // Handle absolute URLs from the chamber site
-            if (url.startsWith('http://') || url.startsWith('https://')) {
-              return url;
-            } 
-            // Handle relative URLs
-            else if (url.startsWith('/')) {
-              return `${baseUrl}${url}`;
-            } else {
-              return `${baseUrl}/${url}`;
-            }
-          };
-          
-          cocPageUrl = processUrl(businessPageUrl);
-          
-          // Enhanced address extraction to properly capture city/state/zip
-          const addressElement = cardElement.find("li.gz-card-address");
-          let streetAddress = "";
-          let cityStateZip = "";
-          let mapUrl = "";
-          
-          if (addressElement.length) {
-            // Get the map URL for the address
-            mapUrl = addressElement.find("a").attr("href") || "";
-            
-            // Extract street address
-            const streetElements = addressElement.find("span.gz-street-address");
-            if (streetElements.length > 0) {
-              streetElements.each((i, el) => {
-                streetAddress += (i > 0 ? ", " : "") + $(el).text().trim();
-              });
-            }
-            
-            // Extract city, state, zip
-            const cityStateZipElement = addressElement.find("div[itemprop='citystatezip']");
-            if (cityStateZipElement.length > 0) {
-              const cityElement = cityStateZipElement.find("span.gz-address-city");
-              const stateElement = cityStateZipElement.find("span").eq(1);
-              const zipElement = cityStateZipElement.find("span").eq(2);
-              
-              const city = cityElement.length > 0 ? cityElement.text().trim() : "City not available";
-              const state = stateElement.length > 0 ? stateElement.text().trim() : "State not available";
-              const zip = zipElement.length > 0 ? zipElement.text().trim() : "ZIP not available";
-              
-              cityStateZip = `${city}, ${state} ${zip}`;
-            }
-          }
-          
-          // Combine street address and city/state/zip with a newline between them
-          const address = streetAddress + (streetAddress && cityStateZip ? "\n" : "") + cityStateZip;
-          
-          // Get phone number
-          const phone = cardElement.find("li.gz-card-phone a").text().trim();
-
-          // Store all extracted information
-          businessesBasicInfo.push({
-            name,
-            address: address || "Address not available",
-            mapUrl,
-            phone: phone || "Phone number not available",
-            cocPageUrl
+        try {
+          console.log("Sending request to:", searchUrl);
+          const searchResponse = await axios.get(searchUrl, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            },
+            // Shorter timeout to quickly try other proxies if one fails
+            timeout: 10000
           });
-        });
+          
+          console.log("Response received:", searchResponse.status);
+          
+          const $ = cheerio.load(searchResponse.data);
+          console.log("HTML loaded with cheerio");
 
-        console.log(`Found ${businessesBasicInfo.length} businesses.`);
-        
-        // Set businesses with the data we've extracted
-        this.businesses = businessesBasicInfo;
+          // Collect business info
+          const businessesBasicInfo = [];
+          $("div.gz-list-card-wrapper").each((_, cardWrapper) => {
+            const cardElement = $(cardWrapper);
+            
+            // Extract name
+            const nameElement = cardElement.find("h5.card-title a");
+            const name = nameElement.text().trim();
+            const businessPageUrl = nameElement.attr("href");
+            
+            // Process the business page URL for the CoC page - don't add proxy
+            let cocPageUrl;
+            
+            // Function to process URLs to get direct chamber URL (without CORS proxy)
+            const processUrl = (url) => {
+              const baseUrl = config.apiBaseUrls.wilmington;
+              
+              // Handle absolute URLs from the chamber site
+              if (url.startsWith('http://') || url.startsWith('https://')) {
+                return url;
+              } 
+              // Handle relative URLs
+              else if (url.startsWith('/')) {
+                return `${baseUrl}${url}`;
+              } else {
+                return `${baseUrl}/${url}`;
+              }
+            };
+            
+            cocPageUrl = processUrl(businessPageUrl);
+            
+            // Enhanced address extraction to properly capture city/state/zip
+            const addressElement = cardElement.find("li.gz-card-address");
+            let streetAddress = "";
+            let cityStateZip = "";
+            let mapUrl = "";
+            
+            if (addressElement.length) {
+              // Get the map URL for the address
+              mapUrl = addressElement.find("a").attr("href") || "";
+              
+              // Extract street address
+              const streetElements = addressElement.find("span.gz-street-address");
+              if (streetElements.length > 0) {
+                streetElements.each((i, el) => {
+                  streetAddress += (i > 0 ? ", " : "") + $(el).text().trim();
+                });
+              }
+              
+              // Extract city, state, zip
+              const cityStateZipElement = addressElement.find("div[itemprop='citystatezip']");
+              if (cityStateZipElement.length > 0) {
+                const cityElement = cityStateZipElement.find("span.gz-address-city");
+                const stateElement = cityStateZipElement.find("span").eq(1);
+                const zipElement = cityStateZipElement.find("span").eq(2);
+                
+                const city = cityElement.length > 0 ? cityElement.text().trim() : "City not available";
+                const state = stateElement.length > 0 ? stateElement.text().trim() : "State not available";
+                const zip = zipElement.length > 0 ? zipElement.text().trim() : "ZIP not available";
+                
+                cityStateZip = `${city}, ${state} ${zip}`;
+              }
+            }
+            
+            // Combine street address and city/state/zip with a newline between them
+            const address = streetAddress + (streetAddress && cityStateZip ? "\n" : "") + cityStateZip;
+            
+            // Get phone number
+            const phone = cardElement.find("li.gz-card-phone a").text().trim();
 
-      } catch (err) {
-        this.error = "Failed to fetch data. Please try again.";
-        console.error("Error fetching data:", err);
-        if (err.response) {
-          console.error("Response status:", err.response.status);
-          console.error("Response data:", err.response.data);
+            // Store all extracted information
+            businessesBasicInfo.push({
+              name,
+              address: address || "Address not available",
+              mapUrl,
+              phone: phone || "Phone number not available",
+              cocPageUrl
+            });
+          });
+
+          console.log(`Found ${businessesBasicInfo.length} businesses.`);
+          
+          if (businessesBasicInfo.length > 0) {
+            // Set businesses with the data we've extracted
+            this.businesses = businessesBasicInfo;
+            success = true;
+            break; // Exit the proxy loop since we found a working proxy
+          } else {
+            console.log("No businesses found, trying next proxy...");
+          }
+
+        } catch (err) {
+          lastError = err;
+          console.error(`Error with proxy ${currentProxy}:`, err);
+          // Continue to next proxy
         }
-      } finally {
-        this.loading = false;
       }
+
+      // If all proxies failed, show an error
+      if (!success) {
+        this.error = "Failed to fetch data after trying all available proxies. Please try again later.";
+        console.error("All proxies failed. Last error:", lastError);
+      }
+      
+      this.loading = false;
     },
 
     resetSearch() {

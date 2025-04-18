@@ -316,7 +316,48 @@ export default {
                 }
               });
               
-              // Priority 2: Only if not found above, try card-link class
+              // Priority 2: Look for links with "Website" text or aria-label, or "View Our Site" text
+              if (!found) {
+                businessPage$("a").each((_, el) => {
+                  const text = businessPage$(el).text().trim();
+                  const ariaLabel = businessPage$(el).attr("aria-label") || "";
+                  
+                  if ((text.toLowerCase().includes("website") || 
+                       text.toLowerCase().includes("view our site") ||
+                       ariaLabel.toLowerCase().includes("website")) && 
+                      businessPage$(el).attr("href")) {
+                    websiteUrl = businessPage$(el).attr("href");
+                    console.log(`Found website link for ${business.name} with text: "${text}"`);
+                    found = true;
+                    return false; // Break each loop
+                  }
+                });
+              }
+              
+              // Priority 3: Look for any link containing http/https that isn't a social media or known non-website link
+              if (!found) {
+                businessPage$("a").each((_, el) => {
+                  const href = businessPage$(el).attr("href") || "";
+                  
+                  // Check if it's a likely website URL (not social media, maps, chamber links, etc.)
+                  if (href.match(/^https?:\/\//) && 
+                      !href.includes("google.com/maps") &&
+                      !href.includes("facebook.com") &&
+                      !href.includes("twitter.com") &&
+                      !href.includes("instagram.com") &&
+                      !href.includes("linkedin.com") &&
+                      !href.includes("youtube.com") &&
+                      !href.includes("wilmingtonchamber.org")) {
+                        
+                    websiteUrl = href;
+                    console.log(`Found likely website URL for ${business.name}: ${websiteUrl}`);
+                    found = true;
+                    return false; // Break each loop
+                  }
+                });
+              }
+              
+              // Priority 4: Only if not found above, try card-link class
               if (!found) {
                 const websiteElement = businessPage$("a.card-link");
                 if (websiteElement.length > 0 && websiteElement.attr("href")) {

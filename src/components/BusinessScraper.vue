@@ -278,16 +278,29 @@ export default {
               website: websiteUrl,
             };
           } catch (err) {
-            console.error(`Error fetching page for ${business.name}:`, err);
+            // Don't show error in console for production builds - we'll handle errors gracefully
+            if (!import.meta.env.PROD) {
+              console.error(`Error fetching page for ${business.name}:`, err);
+            }
             return {
               ...business,
-              website: "Error fetching website",
+              website: "n/a", // More user-friendly error message
             };
           }
         });
         
-        this.businesses = await Promise.all(promises);
-        console.log("All individual business pages processed");
+        try {
+          this.businesses = await Promise.all(promises);
+          console.log("All individual business pages processed");
+        } catch (err) {
+          // Handle any errors in the Promise.all
+          console.error("Error processing business pages:", err);
+          // Still show the businesses we have, even if some failed
+          this.businesses = businessesBasicInfo.map(business => ({
+            ...business,
+            website: "n/a"
+          }));
+        }
 
       } catch (err) {
         this.error = "Failed to fetch data. Please try again.";

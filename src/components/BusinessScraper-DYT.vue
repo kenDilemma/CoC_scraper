@@ -129,80 +129,167 @@ export default {
       this.businesses = [];
 
       try {
-        // Using sample data approach to avoid CORS issues with the Dayton Chamber website
-        console.log("Using sample data for:", this.searchTerm);
+        // Generate the target URL for Dayton Chamber of Commerce
+        const baseUrl = config.apiBaseUrls.dayton.replace(/\/$/, '');
+        const targetUrl = `${baseUrl}/activememberdirectory?term=${encodeURIComponent(this.searchTerm)}`;
         
-        // Generate some sample businesses that match the search term
-        const sampleBusinesses = [
-          {
-            name: `${this.searchTerm} Solutions Inc.`,
-            address: "123 Main Street\nDayton, OH 45402",
-            mapUrl: "https://www.google.com/maps?q=Dayton+OH",
-            phone: "(937) 555-1234",
-            website: "https://example.com",
-            cocPageUrl: "https://www.daytonareachamberofcommerce.growthzoneapp.com/activememberdirectory"
-          },
-          {
-            name: `Dayton ${this.searchTerm} Group`,
-            address: "456 Oak Avenue\nDayton, OH 45403",
-            mapUrl: "https://www.google.com/maps?q=Dayton+OH",
-            phone: "(937) 555-5678",
-            website: "https://example.org",
-            cocPageUrl: "https://www.daytonareachamberofcommerce.growthzoneapp.com/activememberdirectory"
-          },
-          {
-            name: `Ohio ${this.searchTerm} Associates`,
-            address: "789 Elm Street\nDayton, OH 45404",
-            mapUrl: "https://www.google.com/maps?q=Dayton+OH",
-            phone: "(937) 555-9012",
-            website: "https://example.net",
-            cocPageUrl: "https://www.daytonareachamberofcommerce.growthzoneapp.com/activememberdirectory"
-          },
-          {
-            name: `${this.searchTerm} Consultants LLC`,
-            address: "101 Pine Road\nDayton, OH 45405",
-            mapUrl: "https://www.google.com/maps?q=Dayton+OH",
-            phone: "(937) 555-3456",
-            website: "n/a",
-            cocPageUrl: "https://www.daytonareachamberofcommerce.growthzoneapp.com/activememberdirectory"
-          },
-          {
-            name: `First ${this.searchTerm} of Dayton`,
-            address: "202 Cedar Lane\nDayton, OH 45406",
-            mapUrl: "https://www.google.com/maps?q=Dayton+OH",
-            phone: "(937) 555-7890",
-            website: "https://example.biz",
-            cocPageUrl: "https://www.daytonareachamberofcommerce.growthzoneapp.com/activememberdirectory"
+        // Use allorigins.win service with raw format (different endpoint from the one we tried before)
+        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
+        
+        console.log("Generated URL:", proxyUrl);
+        console.log("Sending request to:", proxyUrl);
+        
+        const response = await axios.get(proxyUrl, {
+          // Don't set any custom headers to avoid CORS preflight issues
+          timeout: 15000 // Longer timeout as the Dayton site might be slower
+        });
+        
+        console.log("Response received:", response.status);
+        
+        // Load HTML content with cheerio
+        const $ = cheerio.load(response.data);
+        console.log("HTML loaded with cheerio");
+        
+        // Create a Map to track businesses by name to prevent duplicates
+        const businessMap = new Map();
+        
+        // Select the appropriate elements for Dayton Chamber's directory listings
+        // These selectors are based on inspection of the Dayton Chamber website
+        $('.gz-card, .gz-directory-card').each((_, card) => {
+          try {
+            // Extract business name
+            const nameElement = $(card).find('.gz-card-title');
+            const name = nameElement.text().trim();
+            
+            // Skip if no name found or it's already in our map
+            if (!name || businessMap.has(name)) {
+              return;
+            }
+            
+            console.log("Found business:", name);
+            
+            // Extract business detail page URL
+            let cocPageUrl = '#';
+            const detailLink = nameElement.find('a').first();
+            if (detailLink.length && detailLink.attr('href')) {
+              const href = detailLink.attr('href');
+              cocPageUrl = href.startsWith('/') ? 
+                `${baseUrl}${href}` : 
+                href.startsWith('http') ? href : `${baseUrl}/${href}`;
+            }
+            
+            // Extract address
+            let address = 'Address not available';
+            let mapUrl = '';
+            const addressElement = $(card).find('.gz-card-address, .gz-card-location');
+            
+            if (addressElement.length) {
+              // Check for link to map
+              const mapLink = addressElement.find('a');
+              if (mapLink.length) {
+                mapUrl = mapLink.attr('href') || '';
+              }
+              
+              // Get address text
+              const addressLines = [];
+              addressElement.find('div').each((_, div) => {
+                const line = $(div).text().trim();
+                if (line) addressLines.push(line);
+              });
+              
+              if (addressLines.length > 0) {
+                address = addressLines.join('\n');
+              } else {
+                // Fallback to getting the entire text
+                address = addressElement.text().trim().replace(/\s+/g, ' ');
+              }
+            }
+            
+            // Extract phone
+            let phone = 'Phone not available';
+            const phoneElement = $(card).find('.gz-card-phone, .card-phone');
+            if (phoneElement.length) {
+              phone = phoneElement.text().trim();
+            }
+            
+            // Extract website
+            let website = 'n/a';
+            const websiteElement = $(card).find('.gz-card-website a, .card-website a');
+            if (websiteElement.length) {
+              website = websiteElement.attr('href') || 'n/a';
+            }
+            
+            // Add to map to prevent duplicates
+            businessMap.set(name, {
+              name,
+              address,
+              mapUrl,
+              phone,
+              website,
+              cocPageUrl
+            });
+            
+          } catch (err) {
+            console.error('Error parsing business card:', err);
           }
-        ];
+        });
         
-        // Add a few more samples with varied formats
-        if (this.searchTerm.length > 3) {
-          sampleBusinesses.push({
-            name: `Advanced ${this.searchTerm}`,
-            address: "300 Tech Drive\nDayton, OH 45410",
-            mapUrl: "https://www.google.com/maps?q=Dayton+OH",
-            phone: "(937) 555-2000",
-            website: "https://example.tech",
-            cocPageUrl: "https://www.daytonareachamberofcommerce.growthzoneapp.com/activememberdirectory"
+        console.log(`Found ${businessMap.size} unique businesses`);
+        
+        if (businessMap.size > 0) {
+          this.businesses = Array.from(businessMap.values());
+        } else {
+          // If no businesses found, try alternative selectors
+          console.log("No businesses found with primary selectors, trying alternatives...");
+          
+          // Try a more general approach to find business listings
+          $('.card, .member-card, .directory-item').each((_, card) => {
+            try {
+              // Look for any heading element that might contain the business name
+              const nameElement = $(card).find('h2, h3, h4, h5').first();
+              const name = nameElement.text().trim();
+              
+              if (!name || businessMap.has(name)) {
+                return;
+              }
+              
+              console.log("Found business with alternative selector:", name);
+              
+              // Extract minimal information
+              const cocPageUrl = nameElement.find('a').attr('href') || '#';
+              
+              // Add to map
+              businessMap.set(name, {
+                name,
+                address: "See CoC Page for details",
+                mapUrl: "",
+                phone: "See CoC Page for details",
+                website: "n/a",
+                cocPageUrl: cocPageUrl.startsWith('/') ? 
+                  `${baseUrl}${cocPageUrl}` : 
+                  cocPageUrl.startsWith('http') ? cocPageUrl : `${baseUrl}/${cocPageUrl}`
+              });
+              
+            } catch (err) {
+              console.error('Error parsing with alternative selector:', err);
+            }
           });
           
-          sampleBusinesses.push({
-            name: `${this.searchTerm.charAt(0).toUpperCase() + this.searchTerm.slice(1)} Technologies`,
-            address: "400 Innovation Way\nDayton, OH 45415",
-            mapUrl: "https://www.google.com/maps?q=Dayton+OH",
-            phone: "(937) 555-3000",
-            website: "n/a",
-            cocPageUrl: "https://www.daytonareachamberofcommerce.growthzoneapp.com/activememberdirectory"
-          });
+          console.log(`Found ${businessMap.size} businesses after trying alternative selectors`);
+          
+          if (businessMap.size > 0) {
+            this.businesses = Array.from(businessMap.values());
+          } else {
+            this.error = "No businesses found matching your search term.";
+          }
         }
-        
-        console.log(`Generated ${sampleBusinesses.length} sample businesses`);
-        this.businesses = sampleBusinesses;
-        
       } catch (err) {
-        this.error = "Failed to generate sample data. Please try again.";
-        console.error("Error generating sample data:", err);
+        this.error = "Failed to fetch data. Please try again.";
+        console.error("Error fetching data:", err);
+        if (err.response) {
+          console.error("Response status:", err.response.status);
+          console.error("Response data:", err.response.data);
+        }
       } finally {
         this.loading = false;
       }

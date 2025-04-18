@@ -275,14 +275,17 @@ export default {
               let businessPageUrl = business.cocPageUrl;
               
               // In production, make sure we're using the CORS proxy
-              if (import.meta.env.PROD && !businessPageUrl.includes('corsproxy.io')) {
-                // Extract the actual URL if it's already in the CORS proxy format
-                const actualUrl = businessPageUrl.includes('wilmingtonchamber.org') ? 
-                  businessPageUrl : 
-                  `https://www.wilmingtonchamber.org${businessPageUrl.startsWith('/') ? businessPageUrl : '/' + businessPageUrl}`;
-                
-                // Apply the CORS proxy
-                businessPageUrl = `https://corsproxy.io/?${actualUrl}`;
+              if (import.meta.env.PROD) {
+                // For Wilmington Chamber of Commerce URLs
+                if (businessPageUrl.includes('wilmingtonchamber.org')) {
+                  // Apply the CORS proxy
+                  businessPageUrl = `https://corsproxy.io/?${encodeURIComponent(businessPageUrl)}`;
+                }
+                // For relative URLs, convert to absolute with CORS proxy
+                else if (businessPageUrl.startsWith('/')) {
+                  const fullUrl = `https://www.wilmingtonchamber.org${businessPageUrl}`;
+                  businessPageUrl = `https://corsproxy.io/?${encodeURIComponent(fullUrl)}`;
+                }
               }
               
               console.log(`Fetching individual page for ${business.name}: ${businessPageUrl}`);

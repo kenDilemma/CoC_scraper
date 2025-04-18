@@ -302,8 +302,7 @@ export default {
 
     async fetchIndividualBusinessPages(businessesBasicInfo) {
       console.log("Starting to fetch individual business pages...");
-      const batchSize = 3; // Process fewer businesses at once to avoid overwhelming the server
-      const totalBusinesses = businessesBasicInfo.length;
+      const batchSize = 3; // Process fewer businesses at once to avoid rate limiting
       let updatedWebsiteCount = 0;
       
       // Only process businesses that don't already have a website
@@ -315,64 +314,113 @@ export default {
         return;
       }
       
-      for (let i = 0; i < businessesWithoutWebsites.length; i += batchSize) {
-        const batch = businessesWithoutWebsites.slice(i, i + batchSize);
-        console.log(`Processing batch ${Math.ceil((i+1)/batchSize)} of ${Math.ceil(businessesWithoutWebsites.length/batchSize)}`);
-        
-        try {
-          // Process each business in parallel within the batch
-          const promises = batch.map(async (business) => {
+      try {
+        for (let i = 0; i < businessesWithoutWebsites.length; i += batchSize) {
+          const batch = businessesWithoutWebsites.slice(i, i + batchSize);
+          console.log(`Processing batch ${Math.ceil((i+1)/batchSize)} of ${Math.ceil(businessesWithoutWebsites.length/batchSize)}`);
+          
+          // Process businesses sequentially rather than in parallel to avoid rate limiting
+          for (const business of batch) {
             try {
               console.log(`Fetching website for ${business.name} from ${business.cocPageUrl}`);
               
-              // Get the real URL without our CORS proxy
-              let realUrl = business.cocPageUrl;
-              if (import.meta.env.PROD) {
-                // In production, the URL might include the CORS proxy, so we need to extract the real URL
-                if (realUrl.includes('corsproxy.io')) {
-                  const encodedUrl = realUrl.split('corsproxy.io/?')[1];
-                  realUrl = decodeURIComponent(encodedUrl);
+              // Add a short delay between requests to avoid triggering anti-scraping measures
+              await new Promise(resolve => setTimeout(resolve, 1000));
+              
+              // Use the same proxy we're already using for the main search
+              const response = await axios.get(business.cocPageUrl, { 
+                timeout: 10000,
+                headers: {
+                  'Accept': 'text/html,application/xhtml+xml,application/xml',
+                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
                 }
+              });
+              
+              // Parse the HTML
+              const businessPage$ = cheerio.load(response.data);
+              
+              // Look for website links
+              let websiteUrl = "n/a";
+              let found = false;
+              
+              // Strategy 1: Look for links with "Visit Website" text
+              businessPage$("a").each((_, el) => {
+                const text = businessPage$(el).text().trim();
+                if (text.toLowerCase().includes("visit website") && 
+                    businessPage$(el).attr("href")) {
+                  websiteUrl = businessPage$(el).attr("href");
+                  console.log(`Found "Visit Website" link for ${business.name}: ${websiteUrl}`);
+                  found = true;
+                  return false; // Break each loop
+                }
+              });
+              
+              // Strategy 2: Look for links with "Website" text or aria-label, or "View Our Site" text
+              if (!found) {
+                businessPage$("a").each((_, el) => {
+                  const text = businessPage$(el).text().trim();
+                  const ariaLabel = businessPage$(el).attr("aria-label") || "";
+                  
+                  if ((text.toLowerCase().includes("website") || 
+                       text.toLowerCase().includes("view our site") ||
+                       text.toLowerCase().includes("visit site") ||
+                       ariaLabel.toLowerCase().includes("website")) && 
+                      businessPage$(el).attr("href")) {
+                    websiteUrl = businessPage$(el).attr("href");
+                    console.log(`Found website link for ${business.name} with text: "${text}"`);
+                    found = true;
+                    return false; // Break each loop
+                  }
+                });
               }
               
-              // Call our Python API endpoint
-              const apiUrl = `http://localhost:5000/api/fetch-website?url=${encodeURIComponent(realUrl)}&name=${encodeURIComponent(business.name)}`;
-              console.log(`Calling API: ${apiUrl}`);
+              // Strategy 3: Look for any link containing http/https that isn't a social media or known non-website link
+              if (!found) {
+                businessPage$("a").each((_, el) => {
+                  const href = businessPage$(el).attr("href") || "";
+                  
+                  // Check if it's a likely website URL (not social media, maps, chamber links, etc.)
+                  if (href.match(/^https?:\/\//) && 
+                      !href.includes("google.com/maps") &&
+                      !href.includes("facebook.com") &&
+                      !href.includes("twitter.com") &&
+                      !href.includes("instagram.com") &&
+                      !href.includes("linkedin.com") &&
+                      !href.includes("youtube.com") &&
+                      !href.includes("wilmingtonchamber.org")) {
+                        
+                    websiteUrl = href;
+                    console.log(`Found likely website URL for ${business.name}: ${websiteUrl}`);
+                    found = true;
+                    return false; // Break each loop
+                  }
+                });
+              }
               
-              const response = await axios.get(apiUrl, { timeout: 15000 });
-              
-              if (response.data && response.data.website && response.data.website !== "n/a") {
-                // Update the business in our array with the website URL
+              // If we found a website, update it in our array
+              if (found && websiteUrl !== "n/a") {
                 const index = this.businesses.findIndex(b => b.name === business.name);
                 if (index !== -1) {
-                  this.businesses[index].website = response.data.website;
+                  this.businesses[index].website = websiteUrl;
                   updatedWebsiteCount++;
-                  console.log(`Updated website for ${business.name}: ${response.data.website}`);
+                  console.log(`Updated website for ${business.name}: ${websiteUrl}`);
                 }
+              } else {
+                console.log(`No website found for ${business.name}`);
               }
               
-              return {
-                name: business.name,
-                website: response.data?.website || "n/a"
-              };
             } catch (err) {
-              console.log(`Error fetching website for ${business.name}: ${err.message}`);
-              return {
-                name: business.name,
-                website: "n/a"
-              };
+              console.log(`Error fetching page for ${business.name}: ${err.message}`);
             }
-          });
+          }
           
-          await Promise.all(promises);
           console.log(`Completed batch ${Math.ceil((i+1)/batchSize)}, updated ${updatedWebsiteCount} websites so far`);
           
-          // Small delay between batches to avoid overwhelming the server
-          await new Promise(resolve => setTimeout(resolve, 1500));
-          
-        } catch (error) {
-          console.log(`Error processing batch: ${error.message}`);
+          // Add a larger delay between batches
+          await new Promise(resolve => setTimeout(resolve, 2000));
         }
+      } catch (error) {
+        console.log(`Error in fetchIndividualBusinessPages: ${error.message}`);
       }
       
       console.log(`Finished processing individual business pages. Updated ${updatedWebsiteCount} websites.`);

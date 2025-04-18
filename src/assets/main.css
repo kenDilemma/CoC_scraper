@@ -1,0 +1,8 @@
+@import "tailwindcss";
+@import "primeicons/primeicons.css";
+
+body, #app {
+  @apply bg-gray-800 text-white;
+  margin: 0;
+  padding: 0;
+}

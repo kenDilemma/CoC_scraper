@@ -223,26 +223,71 @@ export default {
           const address = streetAddress + (streetAddress && cityStateZip ? "\n" : "") + cityStateZip;
           const phone = parentDiv.find("li.gz-card-phone a").text().trim();
 
+          // NEW: Try to extract website directly from search results
+          let website = "n/a";
+          
+          // Look for website in the list card
+          const websiteElement = parentDiv.find("li.gz-card-website a");
+          if (websiteElement.length > 0 && websiteElement.attr("href")) {
+            website = websiteElement.attr("href");
+          }
+          
+          // Alternative: Look for any links with text containing website indicators
+          if (website === "n/a") {
+            parentDiv.find("a").each((_, el) => {
+              const linkText = $(el).text().trim().toLowerCase();
+              const href = $(el).attr("href");
+              
+              if (href && 
+                 (linkText.includes("website") || 
+                  linkText.includes("visit site") || 
+                  linkText.includes("view site") || 
+                  linkText.includes("web") ||
+                  linkText === "site")) {
+                website = href;
+                return false; // Break each loop
+              }
+            });
+          }
+          
+          // Final approach: Look for any external URL links that aren't social media or maps
+          if (website === "n/a") {
+            parentDiv.find("a").each((_, el) => {
+              const href = $(el).attr("href") || "";
+              if (href.match(/^https?:\/\//) && 
+                  !href.includes("google.com/maps") &&
+                  !href.includes("facebook.com") &&
+                  !href.includes("twitter.com") &&
+                  !href.includes("instagram.com") &&
+                  !href.includes("linkedin.com") &&
+                  !href.includes("youtube.com") &&
+                  !href.includes("wilmingtonchamber.org")) {
+                website = href;
+                return false; // Break each loop
+              }
+            });
+          }
+
           businessesBasicInfo.push({
             name,
             address: address || "Address not available",
             mapUrl, // Store the Google Maps URL
             phone: phone || "Phone number not available",
             cocPageUrl, // Store the chamber of commerce page URL
+            website: website // Store the website URL found in search results
           });
         });
 
         console.log(`Found ${businessesBasicInfo.length} businesses.`);
         
-        // First populate basic data
+        // Set businesses with already extracted website data
         this.businesses = businessesBasicInfo.map(business => ({
-          ...business,
-          website: "n/a" // Placeholder until we fetch the actual website
+          ...business
         }));
         
-        // Then fetch additional details from individual business pages
-        console.log(`Fetching details for individual business pages...`);
-        this.fetchIndividualBusinessPages(businessesBasicInfo);
+        // If there are still n/a websites and we want to try fetching individual pages (likely to fail with 403)
+        // Uncomment the below line if you want to try anyway
+        // this.fetchIndividualBusinessPages(businessesBasicInfo);
 
       } catch (err) {
         this.error = "Failed to fetch data. Please try again.";
@@ -254,156 +299,6 @@ export default {
       } finally {
         this.loading = false;
       }
-    },
-
-    /**
-     * Fetches individual business pages to extract additional details like website URLs.
-     * Uses proper CORS handling for both development and production environments.
-     */
-    async fetchIndividualBusinessPages(businessesBasicInfo) {
-      // Process business pages in smaller batches to avoid overwhelming the browser
-      const batchSize = 5;
-      const totalBusinesses = businessesBasicInfo.length;
-      
-      for (let i = 0; i < totalBusinesses; i += batchSize) {
-        const batch = businessesBasicInfo.slice(i, i + batchSize);
-        
-        try {
-          const promises = batch.map(async (business) => {
-            try {
-              // Use the correct URL format with CORS proxy in production
-              let businessPageUrl = business.cocPageUrl;
-              
-              // In production, make sure we're using the CORS proxy
-              if (import.meta.env.PROD && !businessPageUrl.includes('corsproxy.io')) {
-                // For full URLs, apply CORS proxy directly
-                if (businessPageUrl.includes('http')) {
-                  businessPageUrl = `${config.corsProxy}${encodeURIComponent(businessPageUrl)}`;
-                } 
-                // For URLs that already include the base URL but not the proxy
-                else if (businessPageUrl.includes('wilmingtonchamber.org')) {
-                  businessPageUrl = `${config.corsProxy}${encodeURIComponent(businessPageUrl)}`;
-                }
-                // For relative URLs, convert to absolute with CORS proxy
-                else {
-                  const fullUrl = `https://www.wilmingtonchamber.org${businessPageUrl.startsWith('/') ? businessPageUrl : '/' + businessPageUrl}`;
-                  businessPageUrl = `${config.corsProxy}${encodeURIComponent(fullUrl)}`;
-                }
-                
-                console.log("Applied CORS proxy. New URL:", businessPageUrl);
-              }
-              
-              console.log(`Fetching individual page for ${business.name}: ${businessPageUrl}`);
-              
-              // Make request to the individual business page with longer timeout
-              const businessPageResponse = await axios.get(businessPageUrl, { timeout: 10000 });
-              const pageHtml = businessPageResponse.data;
-              const businessPage$ = cheerio.load(pageHtml);
-              
-              // Look for the company website link on the individual business page
-              let websiteUrl = "n/a";
-              let found = false;
-              
-              // Priority 1: Look for links with "Visit Website" text
-              businessPage$("a").each((_, el) => {
-                const text = businessPage$(el).text().trim();
-                if (text.toLowerCase().includes("visit website") && 
-                    businessPage$(el).attr("href")) {
-                  websiteUrl = businessPage$(el).attr("href");
-                  console.log(`Found "Visit Website" link for ${business.name}: ${websiteUrl}`);
-                  found = true;
-                  return false; // Break each loop
-                }
-              });
-              
-              // Priority 2: Look for links with "Website" text or aria-label, or "View Our Site" text
-              if (!found) {
-                businessPage$("a").each((_, el) => {
-                  const text = businessPage$(el).text().trim();
-                  const ariaLabel = businessPage$(el).attr("aria-label") || "";
-                  
-                  if ((text.toLowerCase().includes("website") || 
-                       text.toLowerCase().includes("view our site") ||
-                       ariaLabel.toLowerCase().includes("website")) && 
-                      businessPage$(el).attr("href")) {
-                    websiteUrl = businessPage$(el).attr("href");
-                    console.log(`Found website link for ${business.name} with text: "${text}"`);
-                    found = true;
-                    return false; // Break each loop
-                  }
-                });
-              }
-              
-              // Priority 3: Look for any link containing http/https that isn't a social media or known non-website link
-              if (!found) {
-                businessPage$("a").each((_, el) => {
-                  const href = businessPage$(el).attr("href") || "";
-                  
-                  // Check if it's a likely website URL (not social media, maps, chamber links, etc.)
-                  if (href.match(/^https?:\/\//) && 
-                      !href.includes("google.com/maps") &&
-                      !href.includes("facebook.com") &&
-                      !href.includes("twitter.com") &&
-                      !href.includes("instagram.com") &&
-                      !href.includes("linkedin.com") &&
-                      !href.includes("youtube.com") &&
-                      !href.includes("wilmingtonchamber.org")) {
-                        
-                    websiteUrl = href;
-                    console.log(`Found likely website URL for ${business.name}: ${websiteUrl}`);
-                    found = true;
-                    return false; // Break each loop
-                  }
-                });
-              }
-              
-              // Priority 4: Only if not found above, try card-link class
-              if (!found) {
-                const websiteElement = businessPage$("a.card-link");
-                if (websiteElement.length > 0 && websiteElement.attr("href")) {
-                  // Make sure it's not a Google Maps link
-                  const href = websiteElement.attr("href");
-                  if (!href.includes("google.com/maps")) {
-                    websiteUrl = href;
-                    console.log(`Found card-link website for ${business.name}: ${websiteUrl}`);
-                    found = true;
-                  }
-                }
-              }
-              
-              // Update the business in our array with the website URL
-              if (found && websiteUrl !== "n/a") {
-                const index = this.businesses.findIndex(b => b.name === business.name);
-                if (index !== -1) {
-                  this.businesses[index].website = websiteUrl;
-                }
-              }
-              
-              return {
-                name: business.name,
-                website: websiteUrl
-              };
-            } catch (err) {
-              console.log(`Error fetching page for ${business.name}: ${err.message}`);
-              return {
-                name: business.name,
-                website: "n/a"
-              };
-            }
-          });
-          
-          await Promise.all(promises);
-          console.log(`Processed batch ${Math.min(i + batchSize, totalBusinesses)}/${totalBusinesses}`);
-          
-          // Small delay between batches to avoid rate limiting
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          
-        } catch (error) {
-          console.log(`Error processing batch ${i}-${i+batchSize}:`, error);
-        }
-      }
-      
-      console.log("All individual business pages processed");
     },
 
     resetSearch() {

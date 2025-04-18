@@ -21,7 +21,12 @@ const config = {
   },
 
   // CORS proxy configuration
+  // Adding alternate proxies to try if one fails
   corsProxy: 'https://corsproxy.io/?',
+  alternateProxies: [
+    'https://api.allorigins.win/raw?url=',
+    'https://corsproxy.io/?'
+  ]
 };
 
 export default config;

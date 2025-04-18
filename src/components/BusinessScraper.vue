@@ -234,23 +234,15 @@ export default {
 
         console.log(`Found ${businessesBasicInfo.length} businesses.`);
         
-        /* 
-         * Due to CORS restrictions in the browser when deployed to GitHub Pages,
-         * we'll switch our approach: instead of trying to fetch each individual business page
-         * (which will fail with CORS errors), we'll just display the data we already have
-         * from the search results page.
-         */
+        // First populate basic data
         this.businesses = businessesBasicInfo.map(business => ({
           ...business,
-          website: "n/a" // We can't reliably fetch website URLs due to CORS restrictions
+          website: "n/a" // Placeholder until we fetch the actual website
         }));
-
-        // Only attempt to fetch individual business pages when running in development mode
-        if (!import.meta.env.PROD) {
-          console.log("In development mode. Attempting to fetch individual business pages...");
-          // Create a non-blocking async function to fetch additional details
-          this.fetchIndividualBusinessPages(businessesBasicInfo);
-        }
+        
+        // Then fetch additional details from individual business pages
+        console.log(`Fetching details for individual business pages...`);
+        this.fetchIndividualBusinessPages(businessesBasicInfo);
 
       } catch (err) {
         this.error = "Failed to fetch data. Please try again.";
@@ -265,75 +257,104 @@ export default {
     },
 
     /**
-     * Attempts to fetch individual business pages for additional details.
-     * Only called in development mode to avoid CORS errors in production.
+     * Fetches individual business pages to extract additional details like website URLs.
+     * Uses proper CORS handling for both development and production environments.
      */
     async fetchIndividualBusinessPages(businessesBasicInfo) {
-      try {
-        const promises = businessesBasicInfo.map(async (business) => {
-          console.log(`Fetching individual page for ${business.name}: ${business.cocPageUrl}`);
-          try {
-            // Make a second request to the individual business page
-            const businessPageResponse = await axios.get(business.cocPageUrl);
-            const pageHtml = businessPageResponse.data;
-            const businessPage$ = cheerio.load(pageHtml);
-            
-            // Look for the company website link on the individual business page
-            let websiteUrl = "n/a";
-            let found = false;
-            
-            // Priority 1: Look for links with "Visit Website" text
-            businessPage$("a").each((_, el) => {
-              const text = businessPage$(el).text().trim();
-              if (text.toLowerCase().includes("visit website") && 
-                  businessPage$(el).attr("href")) {
-                websiteUrl = businessPage$(el).attr("href");
-                console.log(`Found "Visit Website" link for ${business.name}: ${websiteUrl}`);
-                found = true;
-                return false; // Break each loop
+      // Process business pages in smaller batches to avoid overwhelming the browser
+      const batchSize = 5;
+      const totalBusinesses = businessesBasicInfo.length;
+      
+      for (let i = 0; i < totalBusinesses; i += batchSize) {
+        const batch = businessesBasicInfo.slice(i, i + batchSize);
+        
+        try {
+          const promises = batch.map(async (business) => {
+            try {
+              // Use the correct URL format with CORS proxy in production
+              let businessPageUrl = business.cocPageUrl;
+              
+              // In production, make sure we're using the CORS proxy
+              if (import.meta.env.PROD && !businessPageUrl.includes('corsproxy.io')) {
+                // Extract the actual URL if it's already in the CORS proxy format
+                const actualUrl = businessPageUrl.includes('wilmingtonchamber.org') ? 
+                  businessPageUrl : 
+                  `https://www.wilmingtonchamber.org${businessPageUrl.startsWith('/') ? businessPageUrl : '/' + businessPageUrl}`;
+                
+                // Apply the CORS proxy
+                businessPageUrl = `https://corsproxy.io/?${actualUrl}`;
               }
-            });
-            
-            // Priority 2: Only if not found above, try card-link class
-            if (!found) {
-              const websiteElement = businessPage$("a.card-link");
-              if (websiteElement.length > 0 && websiteElement.attr("href")) {
-                // Make sure it's not a Google Maps link
-                const href = websiteElement.attr("href");
-                if (!href.includes("google.com/maps")) {
-                  websiteUrl = href;
-                  console.log(`Found card-link website for ${business.name}: ${websiteUrl}`);
+              
+              console.log(`Fetching individual page for ${business.name}: ${businessPageUrl}`);
+              
+              // Make request to the individual business page
+              const businessPageResponse = await axios.get(businessPageUrl);
+              const pageHtml = businessPageResponse.data;
+              const businessPage$ = cheerio.load(pageHtml);
+              
+              // Look for the company website link on the individual business page
+              let websiteUrl = "n/a";
+              let found = false;
+              
+              // Priority 1: Look for links with "Visit Website" text
+              businessPage$("a").each((_, el) => {
+                const text = businessPage$(el).text().trim();
+                if (text.toLowerCase().includes("visit website") && 
+                    businessPage$(el).attr("href")) {
+                  websiteUrl = businessPage$(el).attr("href");
+                  console.log(`Found "Visit Website" link for ${business.name}: ${websiteUrl}`);
                   found = true;
+                  return false; // Break each loop
+                }
+              });
+              
+              // Priority 2: Only if not found above, try card-link class
+              if (!found) {
+                const websiteElement = businessPage$("a.card-link");
+                if (websiteElement.length > 0 && websiteElement.attr("href")) {
+                  // Make sure it's not a Google Maps link
+                  const href = websiteElement.attr("href");
+                  if (!href.includes("google.com/maps")) {
+                    websiteUrl = href;
+                    console.log(`Found card-link website for ${business.name}: ${websiteUrl}`);
+                    found = true;
+                  }
                 }
               }
-            }
-            
-            // Update the business in our existing array if we found a website
-            if (found && websiteUrl !== "n/a") {
-              const index = this.businesses.findIndex(b => b.name === business.name);
-              if (index !== -1) {
-                this.businesses[index].website = websiteUrl;
+              
+              // Update the business in our array with the website URL
+              if (found && websiteUrl !== "n/a") {
+                const index = this.businesses.findIndex(b => b.name === business.name);
+                if (index !== -1) {
+                  this.businesses[index].website = websiteUrl;
+                }
               }
+              
+              return {
+                name: business.name,
+                website: websiteUrl
+              };
+            } catch (err) {
+              console.log(`Error fetching page for ${business.name}: ${err.message}`);
+              return {
+                name: business.name,
+                website: "n/a"
+              };
             }
-            
-            return {
-              name: business.name,
-              website: websiteUrl
-            };
-          } catch (err) {
-            // Don't log errors in development mode - handled gracefully
-            return {
-              name: business.name,
-              website: "n/a"
-            };
-          }
-        });
-        
-        const results = await Promise.all(promises);
-        console.log("All individual business pages processed");
-      } catch (error) {
-        console.log("Error processing individual business pages:", error);
+          });
+          
+          await Promise.all(promises);
+          console.log(`Processed batch ${Math.min(i + batchSize, totalBusinesses)}/${totalBusinesses}`);
+          
+          // Small delay between batches to avoid rate limiting
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+        } catch (error) {
+          console.log(`Error processing batch ${i}-${i+batchSize}:`, error);
+        }
       }
+      
+      console.log("All individual business pages processed");
     },
 
     resetSearch() {

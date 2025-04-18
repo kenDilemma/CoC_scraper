@@ -128,9 +128,8 @@ export default {
       this.error = null;
       this.businesses = [];
 
-      // Use a CORS proxy to avoid CORS issues
-      const corsProxy = "https://corsproxy.io/?";
-      // Use the config for the base URL without a trailing slash
+      // Get the base URL from config and add CORS proxy
+      const corsProxy = config.corsProxy;
       const baseUrl = config.apiBaseUrls.wilmington.replace(/\/$/, '');
       const searchUrl = `${corsProxy}${baseUrl}/list/search?q=${encodeURIComponent(this.searchTerm)}&c=&sa=False`;
 
@@ -155,14 +154,15 @@ export default {
           
           // Function to process URLs based on environment
           const processUrl = (url) => {
-            // Don't add CORS proxy if it's already there
-            if (url.startsWith('https://corsproxy.io/?')) {
-              return url;
-            }
-            // Add CORS proxy to URLs
+            const corsProxy = config.corsProxy;
+            const baseUrl = config.apiBaseUrls.wilmington;
+            
+            // Handle absolute URLs from the chamber site
             if (url.startsWith('http://') || url.startsWith('https://')) {
               return `${corsProxy}${url}`;
-            } else if (url.startsWith('/')) {
+            } 
+            // Handle relative URLs
+            else if (url.startsWith('/')) {
               return `${corsProxy}${baseUrl}${url}`;
             } else {
               return `${corsProxy}${baseUrl}/${url}`;
@@ -301,8 +301,8 @@ export default {
         return;
       }
       
-      // Use the same CORS proxy as in the main search
-      const corsProxy = "https://corsproxy.io/?";
+      // Use the CORS proxy from config
+      const corsProxy = config.corsProxy;
       
       try {
         for (let i = 0; i < businessesWithoutWebsites.length; i += batchSize) {

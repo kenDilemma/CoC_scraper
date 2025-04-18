@@ -7,21 +7,16 @@ const isProd = () => {
 };
 
 const config = {
-  // Base API URLs for the chambers of commerce
+  // Base API URLs for the chambers of commerce (without CORS proxy)
   apiBaseUrls: {
     // For Wilmington Chamber of Commerce
-    wilmington: isProd()
-      ? 'https://corsproxy.io/?https://www.wilmingtonchamber.org'
-      : '/api/wilmington',
+    wilmington: 'https://www.wilmingtonchamber.org',
     
     // For Dayton Chamber of Commerce
-    dayton: isProd()
-      ? 'https://corsproxy.io/?https://www.daytonareachamberofcommerce.growthzoneapp.com'
-      : '/api/dayton',
+    dayton: 'https://www.daytonareachamberofcommerce.growthzoneapp.com',
   },
 
   // CORS proxy configuration
-  // Adding alternate proxies to try if one fails
   corsProxy: 'https://corsproxy.io/?',
   alternateProxies: [
     'https://api.allorigins.win/raw?url=',

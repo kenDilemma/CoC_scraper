@@ -128,162 +128,154 @@ export default {
       this.error = null;
       this.businesses = [];
 
-      // Use the config for the base URL
-      const baseUrl = config.apiBaseUrls.dayton;
-      const searchUrl = `${baseUrl}/activememberdirectory/Find?term=${encodeURIComponent(this.searchTerm)}`;
-      console.log("Generated URL:", searchUrl);
+      // Generate the target URL
+      const baseUrl = config.apiBaseUrls.dayton.replace(/\/$/, '');
+      const targetUrl = `${baseUrl}/activememberdirectory/Find?term=${encodeURIComponent(this.searchTerm)}`;
+      
+      // Use the allorigins.win service with JSON output format - same approach that worked for Wilmington
+      const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
+      
+      console.log("Generated URL:", proxyUrl);
 
       try {
-        console.log("Sending request to:", searchUrl);
-        const response = await axios.get(searchUrl);
+        console.log("Sending request to:", proxyUrl);
+        const response = await axios.get(proxyUrl);
         console.log("Response received:", response.status);
         
-        if (!response.data) {
-          throw new Error("No data returned from search");
-        }
+        // Check if we have a valid response
+        if (response.data && response.data.contents) {
+          // Load the HTML content from the JSON response
+          const $ = cheerio.load(response.data.contents);
+          console.log("HTML loaded with cheerio");
         
-        const $ = cheerio.load(response.data);
-        console.log("HTML loaded with cheerio");
-        
-        // Create a Map to track businesses by name to prevent duplicates
-        const businessMap = new Map();
-        
-        // Look for business cards with different possible selectors
-        $('.gz-directory-card, .gz-card-wrapper, .gz-list-card-wrapper').each((_, card) => {
-          try {
-            // Find business name - try different selectors that might contain the name
-            let name = "";
-            const nameEl = $(card).find('.gz-card-title, h3.gz-card-title, h4, h5').first();
-            if (nameEl.length) {
-              name = nameEl.text().trim();
-              // Sometimes the name is inside an <a> tag
-              if (!name) {
-                name = nameEl.find('a').text().trim();
-              }
-            }
-            
-            // Skip if no name found or it's already in our map
-            if (!name || businessMap.has(name)) {
-              return;
-            }
-            console.log("Found business:", name);
-            
-            // Extract address
-            let address = 'Address not available';
-            let mapUrl = '';
-            const addressEl = $(card).find('.gz-card-address a');
-            if (addressEl.length) {
-              mapUrl = addressEl.attr('href') || '';
-              const addressText = addressEl.text().replace(/\s+/g, ' ').trim();
-              if (addressText) {
-                // Split at comma if possible for better formatting
-                const parts = addressText.split(',');
-                if (parts.length > 1) {
-                  const street = parts[0].trim();
-                  const rest = parts.slice(1).join(',').trim();
-                  address = street + '\n' + rest;
-                } else {
-                  address = addressText;
+          // Create a Map to track businesses by name to prevent duplicates
+          const businessMap = new Map();
+          
+          // Look for business cards with different possible selectors
+          $('.gz-directory-card, .gz-card-wrapper, .gz-list-card-wrapper').each((_, card) => {
+            try {
+              // Find business name - try different selectors that might contain the name
+              let name = "";
+              const nameEl = $(card).find('.gz-card-title, h3.gz-card-title, h4, h5').first();
+              if (nameEl.length) {
+                name = nameEl.text().trim();
+                // Sometimes the name is inside an <a> tag
+                if (!name) {
+                  name = nameEl.find('a').text().trim();
                 }
               }
-            }
-            
-            // Extract phone
-            let phone = 'Phone not available';
-            const phoneEl = $(card).find('.gz-card-phone');
-            if (phoneEl.length) {
-              phone = phoneEl.text().trim();
-            }
-            
-            // Extract website
-            let website = 'n/a';
-            const websiteEl = $(card).find('.gz-card-website a');
-            if (websiteEl.length) {
-              website = websiteEl.attr('href') || 'n/a';
-            }
-            
-            // Get CoC page URL - more specifically targeting the gz-card-head-img link
-            let cocPageUrl = '#';
-            
-            // Process the URL properly based on environment
-            const processUrl = (href) => {
-              // In production, use full URLs with CORS proxy
-              if (import.meta.env.PROD) {
-                if (href.startsWith('//')) {
-                  return `${config.apiBaseUrls.dayton}${href.substring(href.indexOf('/', 2))}`;
-                } else if (href.startsWith('/')) {
-                  return `${config.apiBaseUrls.dayton}${href}`;
-                } else {
-                  return href; // Already a full URL
-                }
-              } 
-              // In development, use the proxy configured in vite.config.js
-              else {
-                if (href.startsWith('//')) {
-                  const path = href.substring(href.indexOf('/', 2));
-                  return `/api/dayton${path}`;
-                } else if (href.startsWith('/')) {
-                  return `/api/dayton${href}`;
-                } else if (href.includes('daytonareachamberofcommerce.growthzoneapp.com')) {
-                  try {
-                    const url = new URL(href);
-                    return `/api/dayton${url.pathname}${url.search}`;
-                  } catch (e) {
-                    console.error('Error parsing URL:', e);
-                    return '#';
-                  }
-                } else {
-                  return `/api/dayton/${href}`;
-                }
-              }
-            };
-
-            // Specifically try to find the company logo link first - exactly as in the HTML example
-            const headerImgLink = $(card).find('a.gz-card-head-img');
-            if (headerImgLink.length && headerImgLink.attr('href')) {
-              const href = headerImgLink.attr('href');
-              console.log(`Found card-head-img link for ${name}:`, href);
-              cocPageUrl = processUrl(href);
-            } else {
-              // Fall back to other methods if the specific link isn't found
-              const possibleLinkSelectors = [
-                // Try the More Details link
-                () => $(card).find('a:contains("More Details")'),
-                
-                // Try any link wrapping the business name
-                () => $(card).find('.gz-card-title a'),
-                
-                // Try links in the card body that might lead to details
-                () => $(card).find('.gz-card-more-details a')
-              ];
               
-              for (const selector of possibleLinkSelectors) {
-                const linkEl = selector();
-                if (linkEl.length && linkEl.attr('href')) {
-                  const href = linkEl.attr('href');
-                  console.log(`Found fallback link for ${name}:`, href);
-                  cocPageUrl = processUrl(href);
-                  break;
+              // Skip if no name found or it's already in our map
+              if (!name || businessMap.has(name)) {
+                return;
+              }
+              console.log("Found business:", name);
+              
+              // Extract address
+              let address = 'Address not available';
+              let mapUrl = '';
+              const addressEl = $(card).find('.gz-card-address a');
+              if (addressEl.length) {
+                mapUrl = addressEl.attr('href') || '';
+                const addressText = addressEl.text().replace(/\s+/g, ' ').trim();
+                if (addressText) {
+                  // Split at comma if possible for better formatting
+                  const parts = addressText.split(',');
+                  if (parts.length > 1) {
+                    const street = parts[0].trim();
+                    const rest = parts.slice(1).join(',').trim();
+                    address = street + '\n' + rest;
+                  } else {
+                    address = addressText;
+                  }
                 }
               }
+              
+              // Extract phone
+              let phone = 'Phone not available';
+              const phoneEl = $(card).find('.gz-card-phone');
+              if (phoneEl.length) {
+                phone = phoneEl.text().trim();
+              }
+              
+              // Extract website
+              let website = 'n/a';
+              const websiteEl = $(card).find('.gz-card-website a');
+              if (websiteEl.length) {
+                website = websiteEl.attr('href') || 'n/a';
+              }
+              
+              // Get CoC page URL
+              let cocPageUrl = '#';
+              
+              // Process the URL properly for direct access (without CORS proxy)
+              const processUrl = (href) => {
+                if (href.startsWith('//')) {
+                  return `https:${href}`;
+                } else if (href.startsWith('/')) {
+                  return `${baseUrl}${href}`;
+                } else if (!href.startsWith('http')) {
+                  return `${baseUrl}/${href}`;
+                }
+                return href; // Already a full URL
+              };
+
+              // Specifically try to find the company logo link first
+              const headerImgLink = $(card).find('a.gz-card-head-img');
+              if (headerImgLink.length && headerImgLink.attr('href')) {
+                const href = headerImgLink.attr('href');
+                console.log(`Found card-head-img link for ${name}:`, href);
+                cocPageUrl = processUrl(href);
+              } else {
+                // Fall back to other methods if the specific link isn't found
+                const possibleLinkSelectors = [
+                  // Try the More Details link
+                  () => $(card).find('a:contains("More Details")'),
+                  
+                  // Try any link wrapping the business name
+                  () => $(card).find('.gz-card-title a'),
+                  
+                  // Try links in the card body that might lead to details
+                  () => $(card).find('.gz-card-more-details a')
+                ];
+                
+                for (const selector of possibleLinkSelectors) {
+                  const linkEl = selector();
+                  if (linkEl.length && linkEl.attr('href')) {
+                    const href = linkEl.attr('href');
+                    console.log(`Found fallback link for ${name}:`, href);
+                    cocPageUrl = processUrl(href);
+                    break;
+                  }
+                }
+              }
+              
+              // Add to map to prevent duplicates
+              businessMap.set(name, {
+                name,
+                address,
+                mapUrl,
+                phone,
+                website,
+                cocPageUrl
+              });
+            } catch (err) {
+              console.error('Error parsing business card:', err);
             }
-            
-            // Add to map to prevent duplicates
-            businessMap.set(name, {
-              name,
-              address,
-              mapUrl,
-              phone,
-              website,
-              cocPageUrl
-            });
-          } catch (err) {
-            console.error('Error parsing business card:', err);
+          });
+          
+          console.log(`Found ${businessMap.size} unique businesses`);
+          
+          if (businessMap.size > 0) {
+            this.businesses = Array.from(businessMap.values());
+          } else {
+            this.error = "No businesses found matching your search term.";
+            console.log("No businesses found in the search results.");
           }
-        });
-        
-        console.log(`Found ${businessMap.size} unique businesses`);
-        this.businesses = Array.from(businessMap.values());
+        } else {
+          this.error = "Error processing the response from the server.";
+          console.error("Invalid response format:", response.data);
+        }
       } catch (err) {
         this.error = "Failed to fetch data. Please try again.";
         console.error("Error fetching data:", err);

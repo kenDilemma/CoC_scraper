@@ -14,6 +14,9 @@ const config = {
     
     // For Dayton Chamber of Commerce
     dayton: 'https://www.daytonareachamberofcommerce.growthzoneapp.com',
+
+    // Direct GrowthZone API endpoints
+    dayton_api: 'https://chambermaster.blob.core.windows.net/userfiles/UserFiles/chambers/1273',
   },
 
   // CORS proxy configuration - we'll use a more reliable one
@@ -23,12 +26,17 @@ const config = {
   alternateProxies: [
     'https://corsproxy.io/?',
     'https://cors-anywhere.herokuapp.com/',
-    'https://api.codetabs.com/v1/proxy?quest='
+    'https://api.codetabs.com/v1/proxy?quest=',
+    'https://proxy.cors.sh/',
+    'https://cors.eu.org/',
   ],
   
   // New JSONP service that avoids CORS issues
   jsonpService: 'https://api.allorigins.win/get?url=',
-  jsonpCallback: '&callback=handleJSONP'
+  jsonpCallback: '&callback=handleJSONP',
+
+  // Debug mode - set to true to enable detailed logging
+  debug: true
 };
 
 export default config;

@@ -137,7 +137,11 @@ export default {
 
       try {
         console.log("Sending request to:", searchUrl);
-        const searchResponse = await axios.get(searchUrl);
+        const searchResponse = await axios.get(searchUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+          }
+        });
         console.log("Response received:", searchResponse.status);
         
         const $ = cheerio.load(searchResponse.data);
@@ -145,11 +149,15 @@ export default {
 
         // First pass: collect basic business info and business page URLs
         const businessesBasicInfo = [];
-        $("h5.card-title").each((_, element) => {
-          const name = $(element).find("a").text().trim();
-          const businessPageUrl = $(element).find("a").attr("href");
+        $("div.gz-list-card-wrapper").each((_, cardWrapper) => {
+          const cardElement = $(cardWrapper);
           
-          // Process the business page URL to ensure it works across environments
+          // Extract name
+          const nameElement = cardElement.find("h5.card-title a");
+          const name = nameElement.text().trim();
+          const businessPageUrl = nameElement.attr("href");
+          
+          // Process the business page URL
           let cocPageUrl;
           
           // Function to process URLs based on environment
@@ -171,15 +179,13 @@ export default {
           
           cocPageUrl = processUrl(businessPageUrl);
           
-          const parentDiv = $(element).closest("div.gz-list-card-wrapper");
-          
           // Enhanced address extraction to properly capture city/state/zip
-          const addressElement = parentDiv.find("li.gz-card-address");
+          const addressElement = cardElement.find("li.gz-card-address");
           let streetAddress = "";
           let cityStateZip = "";
-          let mapUrl = ""; // Store the Google Maps URL for the address
+          let mapUrl = "";
           
-          if (addressElement) {
+          if (addressElement.length) {
             // Get the map URL for the address
             mapUrl = addressElement.find("a").attr("href") || "";
             
@@ -208,40 +214,39 @@ export default {
           
           // Combine street address and city/state/zip with a newline between them
           const address = streetAddress + (streetAddress && cityStateZip ? "\n" : "") + cityStateZip;
-          const phone = parentDiv.find("li.gz-card-phone a").text().trim();
+          
+          // Get phone number
+          const phone = cardElement.find("li.gz-card-phone a").text().trim();
 
-          // NEW: Try to extract website directly from search results
+          // Extract website directly from the search results
           let website = "n/a";
           
-          // Look for website in the list card
-          const websiteElement = parentDiv.find("li.gz-card-website a");
+          // Look for website in the dedicated website section first
+          const websiteElement = cardElement.find("li.gz-card-website a");
           if (websiteElement.length > 0 && websiteElement.attr("href")) {
             website = websiteElement.attr("href");
+            console.log(`Found website directly for ${name}: ${website}`);
           }
           
-          // Alternative: Look for any links with text containing website indicators
+          // If no website found, look for any links that might be websites
           if (website === "n/a") {
-            parentDiv.find("a").each((_, el) => {
-              const linkText = $(el).text().trim().toLowerCase();
-              const href = $(el).attr("href");
+            cardElement.find("a").each((_, link) => {
+              const href = $(link).attr("href") || "";
+              const linkText = $(link).text().trim().toLowerCase();
               
-              if (href && 
-                 (linkText.includes("website") || 
-                  linkText.includes("visit site") || 
-                  linkText.includes("view site") || 
-                  linkText.includes("web") ||
-                  linkText === "site")) {
+              // Check for obvious website links by text content
+              if ((linkText.includes("website") || 
+                   linkText.includes("visit site") || 
+                   linkText.includes("view site") || 
+                   linkText === "site") && 
+                  href && !href.includes("wilmingtonchamber.org")) {
                 website = href;
+                console.log(`Found website by link text for ${name}: ${website}`);
                 return false; // Break each loop
               }
-            });
-          }
-          
-          // Final approach: Look for any external URL links that aren't social media or maps
-          if (website === "n/a") {
-            parentDiv.find("a").each((_, el) => {
-              const href = $(el).attr("href") || "";
-              if (href.match(/^https?:\/\//) && 
+              
+              // Check for links that appear to be external websites
+              if (href && href.match(/^https?:\/\//) && 
                   !href.includes("google.com/maps") &&
                   !href.includes("facebook.com") &&
                   !href.includes("twitter.com") &&
@@ -250,30 +255,45 @@ export default {
                   !href.includes("youtube.com") &&
                   !href.includes("wilmingtonchamber.org")) {
                 website = href;
+                console.log(`Found likely website URL for ${name}: ${website}`);
                 return false; // Break each loop
               }
             });
           }
+          
+          // Try to extract from any dynamically loaded data in the card
+          if (website === "n/a") {
+            // Some chambers use data attributes to store website info
+            const dataWebsite = cardElement.find("[data-website]").attr("data-website") ||
+                               cardElement.find("[data-url]").attr("data-url") ||
+                               cardElement.attr("data-website") || 
+                               cardElement.attr("data-url");
+            
+            if (dataWebsite && dataWebsite.match(/^https?:\/\//)) {
+              website = dataWebsite;
+              console.log(`Found website in data attribute for ${name}: ${website}`);
+            }
+          }
 
+          // Store all extracted information
           businessesBasicInfo.push({
             name,
             address: address || "Address not available",
-            mapUrl, // Store the Google Maps URL
+            mapUrl,
             phone: phone || "Phone number not available",
-            cocPageUrl, // Store the chamber of commerce page URL
-            website: website // Store the website URL found in search results
+            cocPageUrl,
+            website
           });
         });
 
         console.log(`Found ${businessesBasicInfo.length} businesses.`);
         
-        // Set businesses with already extracted website data
-        this.businesses = businessesBasicInfo.map(business => ({
-          ...business
-        }));
+        // Set businesses with the data we've extracted
+        this.businesses = businessesBasicInfo;
         
-        // Fetch websites for businesses that don't have one from the individual pages
-        this.fetchIndividualBusinessPages(businessesBasicInfo);
+        // Avoid trying to fetch individual business pages since that's causing CORS issues
+        // Instead, we'll try one more approach to extract websites from search results
+        await this.enhanceBusinessData(businessesBasicInfo);
 
       } catch (err) {
         this.error = "Failed to fetch data. Please try again.";
@@ -284,6 +304,101 @@ export default {
         }
       } finally {
         this.loading = false;
+      }
+    },
+
+    async enhanceBusinessData(businessesBasicInfo) {
+      console.log("Enhancing business data from search results...");
+      
+      // Prepare a new request to try with different parameters that might include more business information
+      // Some chambers include more data when requesting a view other than the default
+      try {
+        // Use the config values
+        const corsProxy = config.corsProxy;
+        const baseUrl = config.apiBaseUrls.wilmington.replace(/\/$/, '');
+        
+        // Try alternate search views/formats that might include more data
+        const enhancedSearchUrl = `${corsProxy}${baseUrl}/list/search?q=${encodeURIComponent(this.searchTerm)}&c=&sa=False&v=grid`;
+        
+        console.log("Trying enhanced search URL:", enhancedSearchUrl);
+        
+        const enhancedResponse = await axios.get(enhancedSearchUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+          }
+        });
+        
+        const $ = cheerio.load(enhancedResponse.data);
+        
+        // Look for additional business data in the enhanced response
+        $("div.gz-list-card-wrapper, div.gz-card").each((_, cardWrapper) => {
+          const cardElement = $(cardWrapper);
+          
+          // Get business name to match with our existing data
+          const nameElement = cardElement.find("h5.card-title a");
+          const name = nameElement.text().trim();
+          
+          // Find the matching business in our array
+          const businessIndex = this.businesses.findIndex(b => b.name === name);
+          if (businessIndex === -1) return; // Skip if no match
+          
+          // Try to extract the website if it wasn't found before
+          if (this.businesses[businessIndex].website === "n/a") {
+            // Look for website in the dedicated website section first
+            const websiteElement = cardElement.find("li.gz-card-website a, a.gz-card-website");
+            if (websiteElement.length > 0 && websiteElement.attr("href")) {
+              const website = websiteElement.attr("href");
+              console.log(`Found website in enhanced search for ${name}: ${website}`);
+              this.businesses[businessIndex].website = website;
+            }
+            
+            // Try additional selectors for websites that might be present
+            const alternateSelectors = [
+              "a[itemprop='url']", 
+              "a.gz-url", 
+              "a.website-link",
+              "a.business-website"
+            ];
+            
+            for (const selector of alternateSelectors) {
+              if (this.businesses[businessIndex].website !== "n/a") break;
+              
+              const element = cardElement.find(selector);
+              if (element.length > 0 && element.attr("href")) {
+                const website = element.attr("href");
+                console.log(`Found website using selector ${selector} for ${name}: ${website}`);
+                this.businesses[businessIndex].website = website;
+              }
+            }
+          }
+        });
+        
+        console.log("Finished enhancing business data");
+        
+        // As a last resort, try to use Google search for those businesses still without websites
+        await this.tryGoogleSearch();
+        
+      } catch (error) {
+        console.error("Error enhancing business data:", error);
+      }
+    },
+    
+    async tryGoogleSearch() {
+      // For businesses that still don't have websites, suggest users try Google search
+      const businessesWithoutWebsites = this.businesses.filter(b => b.website === "n/a");
+      
+      if (businessesWithoutWebsites.length > 0) {
+        console.log(`${businessesWithoutWebsites.length} businesses still don't have websites after enhancement.`);
+        
+        // Add Google search links to businesses without websites
+        businessesWithoutWebsites.forEach(business => {
+          const index = this.businesses.findIndex(b => b.name === business.name);
+          if (index !== -1) {
+            const googleSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(business.name)}`;
+            this.businesses[index].website = googleSearchUrl;
+            console.log(`Added Google search link for ${business.name}`);
+          }
+        });
       }
     },
 

@@ -114,6 +114,7 @@ export default {
       loading: false,
       error: null,
       windowWidth: window.innerWidth, // Track window width for responsiveness
+      currentProxyIndex: 0, // Track which proxy we're using
     };
   },
   methods: {
@@ -133,18 +134,54 @@ export default {
         const baseUrl = config.apiBaseUrls.dayton.replace(/\/$/, '');
         const targetUrl = `${baseUrl}/activememberdirectory?term=${encodeURIComponent(this.searchTerm)}`;
         
-        // Use allorigins.win service with raw format (different endpoint from the one we tried before)
-        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
+        // Try JSONP first as it's often more reliable for CORS issues
+        let response;
+        let success = false;
+        let proxyAttempts = 0;
+        const maxAttempts = config.alternateProxies.length + 2; // +2 for main proxy and JSONP
         
-        console.log("Generated URL:", proxyUrl);
-        console.log("Sending request to:", proxyUrl);
-        
-        const response = await axios.get(proxyUrl, {
-          // Don't set any custom headers to avoid CORS preflight issues
-          timeout: 15000 // Longer timeout as the Dayton site might be slower
-        });
-        
-        console.log("Response received:", response.status);
+        while (!success && proxyAttempts < maxAttempts) {
+          try {
+            let proxyUrl;
+            
+            if (proxyAttempts === 0) {
+              // First try the JSONP approach
+              proxyUrl = `${config.jsonpService}${encodeURIComponent(targetUrl)}`;
+              console.log("Trying JSONP approach:", proxyUrl);
+            } else if (proxyAttempts === 1) {
+              // Then try the main CORS proxy
+              proxyUrl = `${config.corsProxy}${encodeURIComponent(targetUrl)}`;
+              console.log("Trying main CORS proxy:", proxyUrl);
+            } else {
+              // Finally try alternate proxies
+              const alternateIndex = proxyAttempts - 2;
+              proxyUrl = `${config.alternateProxies[alternateIndex]}${encodeURIComponent(targetUrl)}`;
+              console.log(`Trying alternate proxy ${alternateIndex + 1}:`, proxyUrl);
+            }
+            
+            response = await axios.get(proxyUrl, {
+              timeout: 20000, // Longer timeout for proxy services
+            });
+            
+            // If we get here, the request succeeded
+            console.log("Response received:", response.status);
+            success = true;
+            
+            // If this was a JSONP response with contents field, extract it
+            if (proxyAttempts === 0 && response.data && response.data.contents) {
+              response.data = response.data.contents;
+            }
+            
+          } catch (err) {
+            console.error(`Proxy attempt ${proxyAttempts + 1} failed:`, err.message);
+            proxyAttempts++;
+            
+            // If we've tried all proxies, throw the error to be caught by the outer catch
+            if (proxyAttempts >= maxAttempts) {
+              throw new Error("All proxy attempts failed");
+            }
+          }
+        }
         
         // Load HTML content with cheerio
         const $ = cheerio.load(response.data);

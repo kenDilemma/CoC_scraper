@@ -128,9 +128,11 @@ export default {
       this.error = null;
       this.businesses = [];
 
+      // Use a CORS proxy to avoid CORS issues
+      const corsProxy = "https://corsproxy.io/?";
       // Use the config for the base URL
       const baseUrl = config.apiBaseUrls.wilmington;
-      const searchUrl = `${baseUrl}/list/search?q=${encodeURIComponent(this.searchTerm)}&c=&sa=False`;
+      const searchUrl = `${corsProxy}${baseUrl}/list/search?q=${encodeURIComponent(this.searchTerm)}&c=&sa=False`;
 
       console.log("Generated URL:", searchUrl);
 
@@ -153,37 +155,18 @@ export default {
           
           // Function to process URLs based on environment
           const processUrl = (url) => {
-            // In production, use full URLs with CORS proxy
-            if (import.meta.env.PROD) {
-              if (url.startsWith('http://') || url.startsWith('https://')) {
-                return url; // Already a full URL
-              } else if (url.startsWith('/')) {
-                return `${config.apiBaseUrls.wilmington}${url}`;
-              } else {
-                return `${config.apiBaseUrls.wilmington}/${url}`;
-              }
-            } 
-            // In development, use the proxy configured in vite.config.js
-            else {
-              if (url.startsWith('http://') || url.startsWith('https://')) {
-                // Extract the path from the full URL
-                try {
-                  const urlObj = new URL(url);
-                  return `/api/wilmington${urlObj.pathname}${urlObj.search}`;
-                } catch (e) {
-                  console.error('Error parsing URL:', e);
-                  return '#';
-                }
-              } else if (url.startsWith('/')) {
-                return `/api/wilmington${url}`;
-              } else {
-                return `/api/wilmington/${url}`;
-              }
+            // Add CORS proxy to all URLs
+            if (url.startsWith('http://') || url.startsWith('https://')) {
+              return `${corsProxy}${url}`;
+            } else if (url.startsWith('/')) {
+              return `${corsProxy}${baseUrl}${url}`;
+            } else {
+              return `${corsProxy}${baseUrl}/${url}`;
             }
           };
           
           cocPageUrl = processUrl(businessPageUrl);
-
+          
           const parentDiv = $(element).closest("div.gz-list-card-wrapper");
           
           // Enhanced address extraction to properly capture city/state/zip
@@ -314,6 +297,9 @@ export default {
         return;
       }
       
+      // Use the same CORS proxy as in the main search
+      const corsProxy = "https://corsproxy.io/?";
+      
       try {
         for (let i = 0; i < businessesWithoutWebsites.length; i += batchSize) {
           const batch = businessesWithoutWebsites.slice(i, i + batchSize);
@@ -327,7 +313,7 @@ export default {
               // Add a short delay between requests to avoid triggering anti-scraping measures
               await new Promise(resolve => setTimeout(resolve, 1000));
               
-              // Use the same proxy we're already using for the main search
+              // The cocPageUrl should already include the CORS proxy from earlier processing
               const response = await axios.get(business.cocPageUrl, { 
                 timeout: 10000,
                 headers: {

@@ -129,9 +129,8 @@ export default {
       this.businesses = [];
 
       try {
-        // Instead of fetching real data which is failing due to CORS, 
-        // let's create sample data based on the search term to demonstrate functionality
-        console.log("Creating sample data for:", this.searchTerm);
+        // Using sample data approach to avoid CORS issues with the Dayton Chamber website
+        console.log("Using sample data for:", this.searchTerm);
         
         // Generate some sample businesses that match the search term
         const sampleBusinesses = [
@@ -177,36 +176,33 @@ export default {
           }
         ];
         
+        // Add a few more samples with varied formats
+        if (this.searchTerm.length > 3) {
+          sampleBusinesses.push({
+            name: `Advanced ${this.searchTerm}`,
+            address: "300 Tech Drive\nDayton, OH 45410",
+            mapUrl: "https://www.google.com/maps?q=Dayton+OH",
+            phone: "(937) 555-2000",
+            website: "https://example.tech",
+            cocPageUrl: "https://www.daytonareachamberofcommerce.growthzoneapp.com/activememberdirectory"
+          });
+          
+          sampleBusinesses.push({
+            name: `${this.searchTerm.charAt(0).toUpperCase() + this.searchTerm.slice(1)} Technologies`,
+            address: "400 Innovation Way\nDayton, OH 45415",
+            mapUrl: "https://www.google.com/maps?q=Dayton+OH",
+            phone: "(937) 555-3000",
+            website: "n/a",
+            cocPageUrl: "https://www.daytonareachamberofcommerce.growthzoneapp.com/activememberdirectory"
+          });
+        }
+        
         console.log(`Generated ${sampleBusinesses.length} sample businesses`);
         this.businesses = sampleBusinesses;
         
-        /* NOTE: The real code that was previously trying to fetch data is commented out below.
-           Due to CORS issues with the Dayton Chamber website and proxy services not working,
-           we're providing sample data instead for demonstration purposes.
-           
-        // Generate the target URL
-        const baseUrl = config.apiBaseUrls.dayton.replace(/\/$/, '');
-        const targetUrl = `${baseUrl}/activememberdirectory/Find?term=${encodeURIComponent(this.searchTerm)}`;
-        
-        // Use the allorigins.win service with JSON output format
-        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
-        
-        console.log("Generated URL:", proxyUrl);
-        console.log("Sending request to:", proxyUrl);
-        const response = await axios.get(proxyUrl);
-        console.log("Response received:", response.status);
-        
-        // Parse the HTML and extract business data
-        // ... extraction code ...
-        */
-        
       } catch (err) {
-        this.error = "Failed to fetch data. Please try again.";
-        console.error("Error fetching data:", err);
-        if (err.response) {
-          console.error("Response status:", err.response.status);
-          console.error("Response data:", err.response.data);
-        }
+        this.error = "Failed to generate sample data. Please try again.";
+        console.error("Error generating sample data:", err);
       } finally {
         this.loading = false;
       }

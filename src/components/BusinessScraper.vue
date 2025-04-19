@@ -68,10 +68,30 @@
           </div>
         </div>
         
-        <!-- Phone with phone icon -->
+        <!-- Phone with phone icon - updated to use phoneUrl -->
         <div class="mb-2 flex">
           <i class="fas fa-phone text-blue-400 w-6 mt-1"></i>
-          <div>{{ business.phone }}</div>
+          <div>
+            <template v-if="business.phone === 'Phone number not available' || !business.phoneUrl">
+              {{ business.phone }}
+            </template>
+            <a v-else :href="business.phoneUrl" class="text-pink-300 hover:underline">
+              {{ business.phone }}
+            </a>
+          </div>
+        </div>
+        
+        <!-- Website with globe icon -->
+        <div v-if="business.website" class="mb-2 flex">
+          <i class="fas fa-globe text-blue-400 w-6 mt-1"></i>
+          <div>
+            <template v-if="business.website === 'n/a'">
+              {{ business.website }}
+            </template>
+            <a v-else :href="business.website" target="_blank" class="text-pink-300 hover:underline break-all">
+              {{ business.website }}
+            </a>
+          </div>
         </div>
         
         <!-- CoC Page as a simple hyperlink -->
@@ -174,8 +194,8 @@ export default {
             let mapUrl = "";
             
             if (addressElement.length) {
-              // Get the map URL for the address
-              mapUrl = addressElement.find("a").attr("href") || "";
+              // Get the original map URL from the address element (we'll replace it with a better one)
+              const originalMapUrl = addressElement.find("a").attr("href") || "";
               
               // Extract street address
               const streetElements = addressElement.find("span.gz-street-address");
@@ -198,13 +218,29 @@ export default {
                 
                 cityStateZip = `${city}, ${state} ${zip}`;
               }
+              
+              // Combine street address and city/state/zip
+              const address = streetAddress + (streetAddress && cityStateZip ? "\n" : "") + cityStateZip;
+              
+              // Create an optimized Google Maps search URL with the business name
+              // Format business name for better search results
+              const businessNameForSearch = name.replace(/[&]/g, 'and').trim();
+              const fullAddress = address.replace(/\n/g, ', ');
+              
+              // Create a search URL that includes quotes around the business name for better precision
+              mapUrl = `https://www.google.com/maps/search/?api=1&query=%22${encodeURIComponent(businessNameForSearch)}%22+${encodeURIComponent(fullAddress)}`;
+              console.log(`Created optimized map URL for ${name}`);
             }
             
-            // Combine street address and city/state/zip with a newline between them
-            const address = streetAddress + (streetAddress && cityStateZip ? "\n" : "") + cityStateZip;
+            // Get phone number and create tel: URL
+            const phoneElement = cardElement.find("li.gz-card-phone a");
+            let phone = phoneElement.text().trim() || "Phone number not available";
+            let phoneUrl = '';
             
-            // Get phone number
-            const phone = cardElement.find("li.gz-card-phone a").text().trim();
+            if (phone && phone !== "Phone number not available") {
+              // Clean up the phone number to create a valid tel: URL (remove non-digit characters)
+              phoneUrl = `tel:${phone.replace(/\D/g, '')}`;
+            }
 
             // Store all extracted information
             businessesBasicInfo.push({
@@ -212,6 +248,7 @@ export default {
               address: address || "Address not available",
               mapUrl,
               phone: phone || "Phone number not available",
+              phoneUrl,
               cocPageUrl
             });
           });

@@ -252,15 +252,25 @@ export default {
             // Extract phone
             let phone = 'Phone not available';
             let phoneUrl = '';
-            const phoneElement = $(card).find('.gz-card-phone, .card-phone, .card-link[href^="tel:"]');
-            if (phoneElement.length) {
-              if (phoneElement.attr('href') && phoneElement.attr('href').startsWith('tel:')) {
-                phoneUrl = phoneElement.attr('href');
+            // Look specifically for telephone links first
+            const phoneLinkElement = $(card).find('.card-link[href^="tel:"], a[href^="tel:"]');
+            if (phoneLinkElement.length) {
+              phoneUrl = phoneLinkElement.attr('href');
+              // Get the text from the link, but if it's empty, use the tel: value without the prefix
+              phone = phoneLinkElement.text().trim() || phoneUrl.replace('tel:', '');
+            } else {
+              // If no tel: link found, try to find text-based phone number
+              const phoneElement = $(card).find('.gz-card-phone, .card-phone');
+              if (phoneElement.length) {
                 phone = phoneElement.text().trim();
-              } else {
-                phone = phoneElement.text().trim();
+                // Create a tel: URL by removing non-digit characters
                 phoneUrl = `tel:${phone.replace(/\D/g, '')}`;
               }
+            }
+            
+            // Ensure phone number is properly formatted in case we got it from href
+            if (phone.startsWith('tel:')) {
+              phone = phone.replace('tel:', '');
             }
             
             // Extract website - Updated to target the gz-card-website element specifically

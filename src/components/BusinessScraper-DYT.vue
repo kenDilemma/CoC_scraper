@@ -242,60 +242,37 @@ export default {
             const addressElement = $(card).find('.gz-card-address, .gz-card-location, .card-address');
             
             if (addressElement.length) {
-              // Check for link to map
-              const mapLink = $(card).find('a[href^="http://maps.google"], a[href^="https://maps.google"], a[href^="https://www.google.com/maps"]');
-              if (mapLink.length) {
-                // We found an existing map link in the data
-                const originalMapUrl = mapLink.attr('href') || '';
+              // Get address text
+              const addressLines = [];
+              addressElement.find('div').each((_, div) => {
+                const line = $(div).text().trim();
+                if (line) addressLines.push(line);
+              });
+              
+              if (addressLines.length > 0) {
+                address = addressLines.join('\n');
                 
-                // Extract the address for creating better map links if needed
-                const addressLines = [];
-                addressElement.find('div').each((_, div) => {
-                  const line = $(div).text().trim();
-                  if (line) addressLines.push(line);
-                });
+                // Create an optimized Google Maps search URL
+                // Format: Name + Full Address to better find the business page
+                const businessNameForSearch = name.replace(/[&]/g, 'and').trim();
+                const formattedAddress = address.replace(/\n/g, ', ');
                 
-                if (addressLines.length > 0) {
-                  address = addressLines.join('\n');
-                  
-                  // Create a better Google Maps search URL that includes business name
-                  // This is more likely to find the actual business listing rather than just coordinates
-                  const formattedAddress = address.replace(/\n/g, ', ');
-                  const searchQuery = `${name}, ${formattedAddress}`;
-                  mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(searchQuery)}`;
-                  
-                  console.log(`Created enhanced map URL for ${name}`);
-                } else {
-                  // If we couldn't parse the address properly, use the original map URL
-                  mapUrl = originalMapUrl;
-                  // Fallback to getting the entire address text
-                  address = addressElement.text().trim().replace(/\s+/g, ' ');
-                }
+                // Use Google's search API with properly formatted query
+                // The "%22" adds quotes around the business name in the search to make it more precise
+                mapUrl = `https://www.google.com/maps/search/?api=1&query=%22${encodeURIComponent(businessNameForSearch)}%22+${encodeURIComponent(formattedAddress)}`;
+                
+                console.log(`Created optimized map URL for ${name}`);
               } else {
-                // No map link found, create one from the address text
-                const addressLines = [];
-                addressElement.find('div').each((_, div) => {
-                  const line = $(div).text().trim();
-                  if (line) addressLines.push(line);
-                });
-                
-                if (addressLines.length > 0) {
-                  address = addressLines.join('\n');
-                  // Create a Google Maps search URL with business name and address
-                  const formattedAddress = address.replace(/\n/g, ', ');
-                  const searchQuery = `${name}, ${formattedAddress}`;
-                  mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(searchQuery)}`;
-                  
-                  console.log(`Created new map URL for ${name}`);
-                } else {
-                  // Fallback to getting the entire address text
-                  address = addressElement.text().trim().replace(/\s+/g, ' ');
-                  if (address) {
-                    // Still create a map link with whatever address we have
-                    mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name + ', ' + address)}`;
-                  }
+                // Fallback to getting the entire text
+                address = addressElement.text().trim().replace(/\s+/g, ' ');
+                if (address) {
+                  const businessNameForSearch = name.replace(/[&]/g, 'and').trim();
+                  mapUrl = `https://www.google.com/maps/search/?api=1&query=%22${encodeURIComponent(businessNameForSearch)}%22+${encodeURIComponent(address)}`;
                 }
               }
+            } else {
+              // If no address element found but we have the name, create a basic search URL
+              mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name)}`;
             }
             
             // Extract phone

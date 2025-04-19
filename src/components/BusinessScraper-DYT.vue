@@ -263,11 +263,35 @@ export default {
               }
             }
             
-            // Extract website
+            // Extract website - Updated to target the gz-card-website element specifically
             let website = 'n/a';
-            const websiteElement = $(card).find('.gz-card-website a, .card-website a, a.card-link:not([href^="tel:"]):not([href^="http://maps.google"]):not([href^="https://maps.google"])');
+            const websiteElement = $(card).find('.gz-card-website a, li.gz-card-website a');
             if (websiteElement.length) {
               website = websiteElement.attr('href') || 'n/a';
+              console.log("Found website:", website);
+            } else {
+              // Fallback to any card-link that's not a tel: or maps link
+              const otherLinks = $(card).find('a.card-link:not([href^="tel:"]):not([href^="http://maps.google"]):not([href^="https://maps.google"]):not([href^="https://www.google.com/maps"])');
+              if (otherLinks.length) {
+                // Filter out any links that might be phone or map-related
+                for (let i = 0; i < otherLinks.length; i++) {
+                  const link = otherLinks[i];
+                  const href = $(link).attr('href');
+                  const text = $(link).text().trim().toLowerCase();
+                  
+                  // Skip if it looks like a map or phone link
+                  if (text.includes('map') || text.includes('direction') || 
+                      text.includes('phone') || text.includes('call') || 
+                      (href && (href.includes('maps.') || href.includes('tel:')))) {
+                    continue;
+                  }
+                  
+                  // This is likely a website link
+                  website = href;
+                  console.log("Found website (alternative method):", website);
+                  break;
+                }
+              }
             }
             
             // Add to map to prevent duplicates

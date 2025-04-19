@@ -217,9 +217,23 @@ export default {
             const detailLink = nameElement.find('a').first();
             if (detailLink.length && detailLink.attr('href')) {
               const href = detailLink.attr('href');
-              cocPageUrl = href.startsWith('/') ? 
-                `${baseUrl}${href}` : 
-                href.startsWith('http') ? href : `${baseUrl}/${href}`;
+              
+              // Fix for URL construction to avoid duplicate domains
+              if (href.startsWith('http')) {
+                // Already absolute URL
+                cocPageUrl = href;
+              } else if (href.startsWith('//')) {
+                // Protocol-relative URL
+                cocPageUrl = 'https:' + href;
+              } else if (href.startsWith('/')) {
+                // Root-relative URL
+                cocPageUrl = `${baseUrl}${href}`;
+              } else {
+                // Regular relative URL
+                cocPageUrl = `${baseUrl}/${href}`;
+              }
+              
+              console.log("CoC page URL:", cocPageUrl);
             }
             
             // Extract address

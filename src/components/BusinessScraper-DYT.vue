@@ -71,7 +71,14 @@
         <!-- Phone with phone icon -->
         <div class="mb-2 flex">
           <i class="fas fa-phone text-blue-400 w-6 mt-1"></i>
-          <div>{{ business.phone }}</div>
+          <div>
+            <template v-if="business.phone === 'Phone not available' || business.phoneUrl === ''">
+              {{ business.phone }}
+            </template>
+            <a v-else :href="business.phoneUrl" class="text-pink-300 hover:underline">
+              {{ business.phone }}
+            </a>
+          </div>
         </div>
         
         <!-- Website with globe icon -->
@@ -130,9 +137,9 @@ export default {
       this.businesses = [];
 
       try {
-        // Generate the target URL for Dayton Chamber of Commerce
+        // Generate the target URL for Dayton Chamber of Commerce with the correct Find endpoint
         const baseUrl = config.apiBaseUrls.dayton.replace(/\/$/, '');
-        const targetUrl = `${baseUrl}/activememberdirectory?term=${encodeURIComponent(this.searchTerm)}`;
+        const targetUrl = `${baseUrl}/activememberdirectory/Find?term=${encodeURIComponent(this.searchTerm)}`;
         
         // Try JSONP first as it's often more reliable for CORS issues
         let response;
@@ -191,11 +198,11 @@ export default {
         const businessMap = new Map();
         
         // Select the appropriate elements for Dayton Chamber's directory listings
-        // These selectors are based on inspection of the Dayton Chamber website
-        $('.gz-card, .gz-directory-card').each((_, card) => {
+        // Updated selectors based on GrowthZone structure
+        $('.card, .card-body, .member-card, .gz-card, .gz-directory-card').each((_, card) => {
           try {
-            // Extract business name
-            const nameElement = $(card).find('.gz-card-title');
+            // Extract business name - using the gz-card-title class
+            const nameElement = $(card).find('.gz-card-title, .card-title');
             const name = nameElement.text().trim();
             
             // Skip if no name found or it's already in our map
@@ -218,11 +225,11 @@ export default {
             // Extract address
             let address = 'Address not available';
             let mapUrl = '';
-            const addressElement = $(card).find('.gz-card-address, .gz-card-location');
+            const addressElement = $(card).find('.gz-card-address, .gz-card-location, .card-address');
             
             if (addressElement.length) {
               // Check for link to map
-              const mapLink = addressElement.find('a');
+              const mapLink = $(card).find('a[href^="http://maps.google"], a[href^="https://maps.google"], a[href^="https://www.google.com/maps"]');
               if (mapLink.length) {
                 mapUrl = mapLink.attr('href') || '';
               }
@@ -244,14 +251,21 @@ export default {
             
             // Extract phone
             let phone = 'Phone not available';
-            const phoneElement = $(card).find('.gz-card-phone, .card-phone');
+            let phoneUrl = '';
+            const phoneElement = $(card).find('.gz-card-phone, .card-phone, .card-link[href^="tel:"]');
             if (phoneElement.length) {
-              phone = phoneElement.text().trim();
+              if (phoneElement.attr('href') && phoneElement.attr('href').startsWith('tel:')) {
+                phoneUrl = phoneElement.attr('href');
+                phone = phoneElement.text().trim();
+              } else {
+                phone = phoneElement.text().trim();
+                phoneUrl = `tel:${phone.replace(/\D/g, '')}`;
+              }
             }
             
             // Extract website
             let website = 'n/a';
-            const websiteElement = $(card).find('.gz-card-website a, .card-website a');
+            const websiteElement = $(card).find('.gz-card-website a, .card-website a, a.card-link:not([href^="tel:"]):not([href^="http://maps.google"]):not([href^="https://maps.google"])');
             if (websiteElement.length) {
               website = websiteElement.attr('href') || 'n/a';
             }
@@ -262,6 +276,7 @@ export default {
               address,
               mapUrl,
               phone,
+              phoneUrl,
               website,
               cocPageUrl
             });
@@ -280,10 +295,10 @@ export default {
           console.log("No businesses found with primary selectors, trying alternatives...");
           
           // Try a more general approach to find business listings
-          $('.card, .member-card, .directory-item').each((_, card) => {
+          $('.card, .list-item, .member-item, .directory-item').each((_, card) => {
             try {
               // Look for any heading element that might contain the business name
-              const nameElement = $(card).find('h2, h3, h4, h5').first();
+              const nameElement = $(card).find('h2, h3, h4, h5, .title, .name').first();
               const name = nameElement.text().trim();
               
               if (!name || businessMap.has(name)) {
@@ -295,12 +310,22 @@ export default {
               // Extract minimal information
               const cocPageUrl = nameElement.find('a').attr('href') || '#';
               
+              // Look for phone links
+              let phone = "See CoC Page for details";
+              let phoneUrl = "";
+              const phoneLink = $(card).find('a[href^="tel:"]');
+              if (phoneLink.length) {
+                phoneUrl = phoneLink.attr('href');
+                phone = phoneLink.text().trim() || phoneUrl.replace('tel:', '');
+              }
+              
               // Add to map
               businessMap.set(name, {
                 name,
                 address: "See CoC Page for details",
                 mapUrl: "",
-                phone: "See CoC Page for details",
+                phone: phone,
+                phoneUrl: phoneUrl,
                 website: "n/a",
                 cocPageUrl: cocPageUrl.startsWith('/') ? 
                   `${baseUrl}${cocPageUrl}` : 

@@ -192,6 +192,7 @@ export default {
             let streetAddress = "";
             let cityStateZip = "";
             let mapUrl = "";
+            let address = "Address not available"; // Initialize address variable to prevent undefined error
             
             if (addressElement.length) {
               // Get the original map URL from the address element (we'll replace it with a better one)
@@ -220,7 +221,7 @@ export default {
               }
               
               // Combine street address and city/state/zip
-              const address = streetAddress + (streetAddress && cityStateZip ? "\n" : "") + cityStateZip;
+              address = streetAddress + (streetAddress && cityStateZip ? "\n" : "") + cityStateZip;
               
               // Create an optimized Google Maps search URL with the business name
               // Format business name for better search results
@@ -230,6 +231,10 @@ export default {
               // Create a search URL that includes quotes around the business name for better precision
               mapUrl = `https://www.google.com/maps/search/?api=1&query=%22${encodeURIComponent(businessNameForSearch)}%22+${encodeURIComponent(fullAddress)}`;
               console.log(`Created optimized map URL for ${name}`);
+            } else {
+              // Fall back to just using the business name for search if no address is available
+              mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name)}`;
+              console.log(`Created basic map URL for ${name} (no address available)`);
             }
             
             // Get phone number and create tel: URL

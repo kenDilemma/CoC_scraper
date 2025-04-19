@@ -32,9 +32,3 @@ const config = {
 };
 
 export default config;
-
-<span itemprop="sameAs">Visit Website</span>
-<a href="http://athertonplumbing.com/" target="&quot;_blank&quot;" class="card-link" _clt="">
-<i class="gz-fas gz-fa-globe"></i>
-<span itemprop="sameAs">Visit Website</span>
-</a>

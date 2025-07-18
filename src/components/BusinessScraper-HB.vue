@@ -54,18 +54,8 @@
         :key="business.id"
         class="bg-gray-600 p-4 rounded shadow-md flex flex-col"
       >
-        <div class="flex items-start justify-between mb-2">
-          <h3 class="text-lg font-bold text-white">{{ business.name }}</h3>
-          <a
-            v-if="business.cocPageUrl && business.cocPageUrl !== '#'"
-            :href="business.cocPageUrl"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="text-blue-400 hover:underline flex items-center"
-          >
-            <i class="fas fa-external-link-alt text-sm"></i>
-          </a>
-        </div>
+        <!-- Business Name - larger and bold, white color -->
+        <p class="text-lg font-bold text-white mb-2">{{ business.name }}</p>
         
         <!-- Address with map icon -->
         <div class="mb-2 flex">
@@ -213,6 +203,13 @@ export default {
           phoneUrl = phoneElement.attr('href') || `tel:${phone.replace(/\D/g, '')}`;
         }
         
+        // Extract website
+        let website = 'n/a';
+        const websiteElement = $element.find(selectors.websiteElement);
+        if (websiteElement.length) {
+          website = websiteElement.attr('href') || 'n/a';
+        }
+        
         // Set default values for missing information
         if (!phone) {
           phone = 'Phone number not available';
@@ -236,7 +233,7 @@ export default {
             phoneUrl,
             mapUrl,
             cocPageUrl,
-            website: null // Will be populated if we add website parsing
+            website
           });
         }
       });

@@ -60,7 +60,8 @@ const config = {
         streetAddress: 'span.gz-street-address',
         cityStateZip: 'div[itemprop="citystatezip"]',
         cityElement: 'span.gz-address-city',
-        phoneElement: 'li.gz-card-phone a'
+        phoneElement: 'li.gz-card-phone a',
+        websiteElement: 'a:contains("Visit Website")'
       }
     }
   ],

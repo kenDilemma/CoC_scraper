@@ -63,6 +63,23 @@ const config = {
         phoneElement: 'li.gz-card-phone a',
         websiteElement: 'a:contains("Visit Website")'
       }
+    },
+    {
+      id: 'new-york',
+      name: 'New York',
+      baseUrl: 'https://chamber.nyc',
+      searchPath: '/business-directory',
+      searchParams: (term) => `?search=${encodeURIComponent(term)}`,
+      type: 'nyc-custom', // Different scraping pattern
+      selectors: {
+        cardWrapper: 'div:has(h3)',
+        businessName: 'h3',
+        businessUrl: 'h3',
+        contactPerson: 'p:contains("   ")',
+        phoneElement: 'p:contains("   ")',
+        websiteElement: 'a[href^="http"]',
+        addressElement: 'p:contains("   ")'
+      }
     }
   ],
 
@@ -85,6 +102,11 @@ const config = {
     return config.cities.find(city => city.id === cityId);
   },
 
+  // Proxy URL helper
+  getProxyUrl: (proxy, targetUrl) => {
+    return `${proxy}${encodeURIComponent(targetUrl)}`;
+  },
+
   // Backwards compatibility - will be removed later
   apiBaseUrls: {
     wilmington: 'https://www.wilmingtonchamber.org',
@@ -94,3 +116,7 @@ const config = {
 };
 
 export default config;
+
+// Named exports for convenience
+export const getCityConfig = config.getCityConfig;
+export const getProxyUrl = config.getProxyUrl;

@@ -27,13 +27,15 @@
 import Wilmington from './components/BusinessScraper.vue'
 import Dayton from './components/BusinessScraper-DYT.vue'
 import HuntingtonBeach from './components/BusinessScraper-HB.vue'
+import NewYork from './components/BusinessScraper-NYC.vue'
 import config from './config.js'
 
 export default {
   components: {
     Wilmington,
     Dayton,
-    HuntingtonBeach
+    HuntingtonBeach,
+    NewYork
   },
   data() {
     return {
@@ -41,7 +43,8 @@ export default {
       cities: [
         { id: 'wilmington', name: 'Wilmington', component: 'Wilmington' },
         { id: 'dayton', name: 'Dayton', component: 'Dayton' },
-        { id: 'huntington-beach', name: 'Huntington Beach', component: 'HuntingtonBeach' }
+        { id: 'huntington-beach', name: 'Huntington Beach', component: 'HuntingtonBeach' },
+        { id: 'new-york', name: 'New York', component: 'NewYork' }
       ]
     }
   }

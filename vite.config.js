@@ -9,9 +9,19 @@ export default defineConfig({
   plugins: [
     vue(),
   ],
+  define: {
+    // Disable HMR client completely
+    __VITE_HMR__: false,
+  },
   server: {
     open: '/', // Automatically opens the browser to the correct path
     port: 5173, // Default port for Vite
+    hmr: {
+      overlay: false, // Disable error overlay but keep HMR
+    },
+    watch: {
+      usePolling: false, // Use normal file watching
+    },
     proxy: {
       '/api/wilmington': {
         target: 'https://www.wilmingtonchamber.org',

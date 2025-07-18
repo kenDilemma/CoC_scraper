@@ -7,7 +7,6 @@ const isProd = () => {
   return import.meta.env.PROD;
 };
 
-// Custom parser for NYC (non-GrowthZone)
 const parseNYCBusinesses = async (html, searchTerm) => {
   const $ = cheerio.load(html);
   const businesses = [];
@@ -149,6 +148,7 @@ const parseNYCBusinesses = async (html, searchTerm) => {
   return businesses;
 };
 
+
 const config = {
   // City-specific configurations
   cities: [
@@ -159,6 +159,7 @@ const config = {
       searchPath: '/list/search',
       searchParams: (term) => `?q=${encodeURIComponent(term)}&c=&sa=False`,
       type: 'growthzone-list', // Different scraping patterns
+      tryDirectFirst: true, // Try direct access before CORS proxies
       selectors: {
         cardWrapper: 'div.gz-list-card-wrapper',
         businessName: 'h5.card-title a',
@@ -177,6 +178,7 @@ const config = {
       searchPath: '/activememberdirectory/Find',
       searchParams: (term) => `?term=${encodeURIComponent(term)}`,
       type: 'growthzone-cards', // Different scraping patterns
+      tryDirectFirst: true, // Try direct access before CORS proxies
       selectors: {
         cardWrapper: '.card, .card-body, .member-card, .gz-card, .gz-directory-card',
         businessName: '.gz-card-title, .card-title',
@@ -195,6 +197,7 @@ const config = {
       searchPath: '/list/search',
       searchParams: (term) => `?q=${encodeURIComponent(term)}&c=&sa=False`,
       type: 'growthzone-list', // Same as Wilmington
+      tryDirectFirst: true, // Try direct access before CORS proxies
       selectors: {
         cardWrapper: 'div.gz-list-card-wrapper',
         businessName: 'h5.card-title a',
@@ -214,6 +217,7 @@ const config = {
       searchPath: '/business-directory',
       searchParams: (term) => `?search=${encodeURIComponent(term)}`,
       type: 'custom', // Custom parsing
+      tryDirectFirst: true, // Try direct access before CORS proxies
       customParser: parseNYCBusinesses, // Custom parser function
       selectors: {
         // These are used for documentation but actual parsing is in customParser
@@ -224,6 +228,45 @@ const config = {
         phoneElement: 'p',
         websiteElement: 'a[href^="http"]',
         addressElement: 'p'
+      }
+    },
+    {
+      id: 'roanoke',
+      name: 'Roanoke',
+      baseUrl: 'https://business.roanokechamber.org',
+      searchPath: '/list/search',
+      searchParams: (term) => `?q=${encodeURIComponent(term)}&c=&sa=False`,
+      type: 'growthzone-list',
+      tryDirectFirst: true, // Try direct access before CORS proxies
+      selectors: {
+        cardWrapper: 'div.gz-list-card-wrapper',
+        businessName: 'h5.card-title a',
+        businessUrl: 'h5.card-title a',
+        addressElement: 'li.gz-card-address',
+        streetAddress: 'span.gz-street-address',
+        cityStateZip: 'div[itemprop="citystatezip"]',
+        cityElement: 'span.gz-address-city',
+        phoneElement: 'li.gz-card-phone a',
+        websiteElement: 'span[itemprop="sameAs"]'
+      }
+    },
+    {
+      id: 'lake-norman',
+      name: 'Lake Norman',
+      baseUrl: 'https://business.lakenormanchamber.org',
+      searchPath: '/directory/Find',
+      searchParams: (term) => `?term=${encodeURIComponent(term)}`,
+      type: 'growthzone-cards', // Similar to Dayton structure
+      tryDirectFirst: false, // Skip direct access - GrowthZone blocks CORS
+      selectors: {
+        cardWrapper: '.card, .card-body, .member-card, .gz-card, .gz-directory-card',
+        businessName: '.gz-card-title, .card-title',
+        businessUrl: '.gz-card-title a, .card-title a',
+        addressElement: '.gz-card-address, .gz-card-location, .card-address',
+        phoneElement: '.card-link[href^="tel:"], a[href^="tel:"]',
+        phoneFallback: '.gz-card-phone, .card-phone',
+        websiteElement: '.gz-card-website a, li.gz-card-website a',
+        websiteFallback: 'a.card-link:not([href^="tel:"]):not([href^="http://maps.google"]):not([href^="https://maps.google"]):not([href^="https://www.google.com/maps"])'
       }
     }
   ],

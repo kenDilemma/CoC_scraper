@@ -274,3 +274,61 @@ The systematized approach makes these future improvements easy:
 5. **Performance**: Caching, pagination, etc.
 
 Changes to the base component automatically apply to all cities, ensuring consistency and reducing maintenance effort.
+
+## **Special Case: Atlas/ChamberMaster Systems**
+
+Some chambers use Atlas or ChamberMaster platforms, which have similar functionality to GrowthZone but different technical implementation.
+
+### **Atlas System Indicators:**
+- ✅ URLs containing `/atlas/directory/` or `/atlas/`
+- ✅ Search pages like `*/atlas/directory/search`
+- ✅ Similar card-based layouts to GrowthZone
+- ✅ Often use standard web technologies (not .gz- classes)
+
+**Common Example: Atlas/ChamberMaster Systems**
+- URL pattern: Often includes `/atlas/` or `/directory/` in the path
+- **Recommendation**: Start with GrowthZone approach, then switch to custom if needed
+
+### **Investigation Process for Atlas Systems:**
+
+1. **Try GrowthZone First**:
+   ```bash
+   node scripts/generate-city.js "YourCity" "yourcity" --type=growthzone
+   ```
+
+2. **Update Configuration**:
+   ```javascript
+   // In config.js, try this Atlas configuration:
+   {
+     id: 'yourcity',
+     name: 'Your City',
+     baseUrl: 'https://yourchamber.com',
+     searchPath: '/atlas/directory/search',
+     searchParams: (term) => `?q=${encodeURIComponent(term)}`,
+     type: 'growthzone-list', // Try GrowthZone approach first
+   }
+   ```
+
+3. **Test the Component**:
+   - Add to App.vue and test with search terms like "restaurant" or "bank"
+   - Check browser console for results
+
+4. **If No Results**: Atlas systems often need custom parsing
+   ```bash
+   # Generate custom component instead
+   node scripts/generate-city.js "YourCity" "yourcity" --type=custom
+   ```
+
+### **Atlas Debugging Steps:**
+1. Visit the chamber's directory search page
+2. Try a search (like "restaurant")
+3. Open browser DevTools and inspect the results HTML
+4. Look for business card containers and their CSS classes
+5. Check search URL format and parameters
+
+### **Common Atlas Patterns:**
+- Search results often in `.member-card` or `.business-card` containers
+- May use different parameter formats: `?keyword=term` or `?search=term`
+- Business details might be in `<h4>`, `<h5>`, or custom classes
+
+**Note**: Some Atlas/ChamberMaster systems use JavaScript-rendered content that cannot be scraped with our current static HTML approach. If you encounter a system that loads content dynamically, it may not be compatible with our scraper.

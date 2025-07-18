@@ -28,6 +28,8 @@ import Wilmington from './components/BusinessScraper.vue'
 import Dayton from './components/BusinessScraper-DYT.vue'
 import HuntingtonBeach from './components/BusinessScraper-HB.vue'
 import NewYork from './components/BusinessScraper-NYC.vue'
+import Roanoke from './components/BusinessScraper-Roanoke.vue'
+import LakeNorman from './components/BusinessScraper-LakeNorman.vue'
 import config from './config.js'
 
 export default {
@@ -35,7 +37,9 @@ export default {
     Wilmington,
     Dayton,
     HuntingtonBeach,
-    NewYork
+    NewYork,
+    Roanoke,
+    LakeNorman
   },
   data() {
     return {
@@ -44,7 +48,9 @@ export default {
         { id: 'wilmington', name: 'Wilmington', component: 'Wilmington' },
         { id: 'dayton', name: 'Dayton', component: 'Dayton' },
         { id: 'huntington-beach', name: 'Huntington Beach', component: 'HuntingtonBeach' },
-        { id: 'new-york', name: 'New York', component: 'NewYork' }
+        { id: 'new-york', name: 'New York', component: 'NewYork' },
+        { id: 'roanoke', name: 'Roanoke', component: 'Roanoke' },
+        { id: 'lake-norman', name: 'Lake Norman', component: 'LakeNorman' }
       ]
     }
   }

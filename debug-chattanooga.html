@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Chattanooga HTML</title>
+</head>
+<body>
+    <script>
+        // Test the Chattanooga URL directly to see HTML structure
+        fetch('https://api.codetabs.com/v1/proxy?quest=https://web.chattanoogachamber.com/atlas/directory/search?keyword=bank')
+        .then(response => response.text())
+        .then(html => {
+            console.log('Full HTML:', html);
+            document.body.innerHTML = '<pre>' + html.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</pre>';
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            document.body.innerHTML = '<p>Error: ' + error.message + '</p>';
+        });
+    </script>
+</body>
+</html>

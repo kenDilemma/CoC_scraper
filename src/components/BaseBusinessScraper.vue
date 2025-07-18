@@ -134,7 +134,7 @@
     </div>
 
     <!-- No Results Message -->
-    <div v-else-if="!loading && searchTerm && businesses.length === 0" class="text-center text-gray-400 py-4">
+    <div v-else-if="!loading && searchTerm && businesses.length === 0 && searchPerformed" class="text-center text-gray-400 py-4">
       No businesses found for "{{ searchTerm }}"
     </div>
   </div>
@@ -159,6 +159,7 @@ export default {
       businesses: [],
       loading: false,
       error: null,
+      searchPerformed: false, // Track if search has been attempted
       cityConfig: getCityConfig(this.cityKey),
       windowWidth: window.innerWidth
     };
@@ -178,6 +179,7 @@ export default {
       this.searchTerm = '';
       this.businesses = [];
       this.error = null;
+      this.searchPerformed = false; // Reset search performed flag
     },
 
     async fetchBusinesses() {
@@ -186,6 +188,7 @@ export default {
       this.loading = true;
       this.error = null;
       this.businesses = [];
+      this.searchPerformed = true; // Mark that search has been attempted
 
       try {
         const url = `${this.cityConfig.baseUrl}${this.cityConfig.searchPath}${this.cityConfig.searchParams(this.searchTerm)}`;
@@ -208,9 +211,25 @@ export default {
     },
 
     async fetchWithProxy(url) {
+      // Try direct access first if the city config allows it
+      if (this.cityConfig.tryDirectFirst !== false) {
+        try {
+          console.log(`[${this.cityKey}] Trying direct access first`);
+          const response = await axios.get(url, {
+            timeout: 10000
+          });
+          console.log(`[${this.cityKey}] Success with direct access`);
+          return response;
+        } catch (err) {
+          console.log(`[${this.cityKey}] Direct access failed:`, err.message);
+          console.log(`[${this.cityKey}] Falling back to CORS proxies...`);
+        }
+      }
+
+      // Fall back to proxy methods
       const proxies = [
-        'https://api.allorigins.win/get?url=',
         'https://corsproxy.io/?',
+        'https://api.allorigins.win/get?url=',
         'https://api.codetabs.com/v1/proxy?quest='
       ];
 
@@ -237,10 +256,10 @@ export default {
         }
       }
       
-      throw new Error('All proxy attempts failed');
+      throw new Error('All access methods failed');
     },
 
-    // Default GrowthZone parser (for cities like Dayton, HB, Wilmington)
+    // Default parser - uses city-specific selectors from config
     parseBusinesses(html) {
       const $ = cheerio.load(html);
       const businesses = [];
@@ -248,11 +267,21 @@ export default {
 
       console.log(`[${this.cityKey}] Parsing HTML for businesses...`);
       console.log(`[${this.cityKey}] HTML length:`, html.length);
+      console.log(`[${this.cityKey}] HTML preview:`, html.substring(0, 500));
 
-      // GrowthZone parsing logic
-      $('.gz-list-card').each((index, element) => {
+      // Use city-specific selectors from config
+      const selectors = this.cityConfig.selectors || {};
+      
+      // Try to find business cards/items
+      const cardSelector = selectors.cardWrapper || '.gz-list-card';
+      const nameSelector = selectors.businessName || '.gz-card-title a';
+      
+      console.log(`[${this.cityKey}] Looking for cards with selector: ${cardSelector}`);
+      console.log(`[${this.cityKey}] Looking for names with selector: ${nameSelector}`);
+      
+      $(cardSelector).each((index, element) => {
         const $element = $(element);
-        const nameElement = $element.find('.gz-card-title a').first();
+        const nameElement = $element.find(nameSelector).first();
         const name = nameElement.text().trim();
 
         if (name && !businessNames.has(name)) {
@@ -270,32 +299,59 @@ export default {
             phoneUrl: null
           };
 
-          // Extract chamber URL
-          const chamberLink = nameElement.attr('href');
-          if (chamberLink) {
-            business.chamberUrl = chamberLink.startsWith('http') ? chamberLink : `${this.cityConfig.baseUrl}${chamberLink}`;
+          // Extract chamber URL using selectors
+          const businessUrlSelector = selectors.businessUrl || '.gz-card-title a';
+          const chamberLinkElement = $element.find(businessUrlSelector).first();
+          if (chamberLinkElement.length > 0) {
+            const chamberLink = chamberLinkElement.attr('href');
+            if (chamberLink) {
+              business.chamberUrl = chamberLink.startsWith('http') ? chamberLink : `${this.cityConfig.baseUrl}${chamberLink}`;
+            }
           }
 
-          // Extract other details
-          $element.find('.gz-card-info p').each((i, p) => {
-            const $p = $(p);
-            const text = $p.text().trim();
+          // Extract address using selectors
+          const addressSelector = selectors.addressElement || '.gz-card-info p';
+          $element.find(addressSelector).each((i, addressEl) => {
+            const $addressEl = $(addressEl);
+            const text = $addressEl.text().trim();
             
             if (text.match(/\d+\s+[A-Za-z\s]+(?:Street|St|Avenue|Ave|Road|Rd|Drive|Dr|Boulevard|Blvd|Lane|Ln|Way|Place|Pl|Court|Ct)/i)) {
               business.address = text;
               business.mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name + ' ' + text)}`;
             }
-            else if (text.match(/\d{3}[-.\s]?\d{3}[-.\s]?\d{4}|\(\d{3}\)\s?\d{3}[-.\s]?\d{4}/)) {
+          });
+
+          // Extract phone using selectors
+          const phoneSelector = selectors.phoneElement || '.gz-card-info p';
+          $element.find(phoneSelector).each((i, phoneEl) => {
+            const $phoneEl = $(phoneEl);
+            const text = $phoneEl.text().trim();
+            
+            if (text.match(/\d{3}[-.\s]?\d{3}[-.\s]?\d{4}|\(\d{3}\)\s?\d{3}[-.\s]?\d{4}/)) {
               business.phone = text;
               business.phoneUrl = `tel:${text.replace(/\D/g, '')}`;
             }
-            else if (text.includes('@')) {
+          });
+
+          // Extract email
+          $element.find('*').each((i, el) => {
+            const text = $(el).text().trim();
+            if (text.includes('@') && text.includes('.')) {
               business.email = text;
+              return false; // break
             }
           });
 
-          // Extract website
-          const websiteLink = $element.find('a[href^="http"]:not([href*="' + this.cityConfig.baseUrl + '"])').first();
+          // Extract website using selectors
+          const websiteSelector = selectors.websiteElement || `a[href^="http"]:not([href*="${this.cityConfig.baseUrl}"])`;
+          
+          let websiteLink = $element.find(websiteSelector).first();
+          
+          // Special handling for span[itemprop="sameAs"] - get the parent link
+          if (websiteSelector === 'span[itemprop="sameAs"]' && websiteLink.length > 0) {
+            websiteLink = websiteLink.closest('a');
+          }
+          
           if (websiteLink.length > 0) {
             business.website = websiteLink.attr('href');
             business.websiteDisplay = business.website.replace(/^https?:\/\//, '').replace(/\/$/, '');
@@ -305,7 +361,46 @@ export default {
         }
       });
 
-      console.log(`[${this.cityKey}] Found ${businesses.length} businesses`);
+      console.log(`[${this.cityKey}] Found ${businesses.length} businesses with configured selectors`);
+      
+      // If no businesses found with configured selectors, try some common fallbacks
+      if (businesses.length === 0) {
+        console.log(`[${this.cityKey}] No businesses found, trying fallback selectors...`);
+        
+        // Log what elements we can find in the HTML for debugging
+        console.log(`[${this.cityKey}] Available div elements:`, $('div').length);
+        console.log(`[${this.cityKey}] Available a elements:`, $('a').length);
+        console.log(`[${this.cityKey}] Available h1-h6 elements:`, $('h1,h2,h3,h4,h5,h6').length);
+        
+        // Try different selectors
+        const fallbackSelectors = [
+          'div[class*="card"]',
+          'div[class*="item"]', 
+          'div[class*="business"]',
+          'div[class*="member"]',
+          'div[class*="directory"]',
+          '.card',
+          '.item',
+          '.business',
+          '.member'
+        ];
+        
+        for (const fallbackSelector of fallbackSelectors) {
+          const elements = $(fallbackSelector);
+          console.log(`[${this.cityKey}] Found ${elements.length} elements with selector: ${fallbackSelector}`);
+          if (elements.length > 0) {
+            elements.each((index, element) => {
+              const $element = $(element);
+              const elementHtml = $element.html();
+              if (elementHtml && elementHtml.length > 0) {
+                console.log(`[${this.cityKey}] Sample element ${index + 1}:`, elementHtml.substring(0, 200) + '...');
+              }
+            });
+            break; // Just show first working selector for debugging
+          }
+        }
+      }
+      
       this.businesses = businesses;
     },
 

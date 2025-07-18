@@ -57,8 +57,8 @@
         <div class="flex items-start justify-between mb-2">
           <h3 class="text-lg font-bold text-white">{{ business.name }}</h3>
           <a
-            v-if="business.url"
-            :href="business.url"
+            v-if="business.cocPageUrl && business.cocPageUrl !== '#'"
+            :href="business.cocPageUrl"
             target="_blank"
             rel="noopener noreferrer"
             class="text-blue-400 hover:underline flex items-center"
@@ -67,38 +67,52 @@
           </a>
         </div>
         
-        <div class="text-gray-300 mb-4">
-          <div v-if="business.address" class="mb-2">
-            <i class="fas fa-map-marker-alt text-blue-400 mr-2"></i>
-            <a
-              :href="business.mapUrl"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="text-blue-400 hover:underline"
-            >
+        <!-- Address with map icon -->
+        <div class="mb-2 flex">
+          <i class="fas fa-map-marker-alt text-blue-400 w-6 mt-1"></i>
+          <div class="flex flex-col">
+            <template v-if="business.address === 'Address not available'">
               {{ business.address }}
+            </template>
+            <a v-else :href="business.mapUrl" target="_blank" class="text-pink-300 hover:underline">
+              <div>{{ business.address.split('\n')[0] }}</div>
+              <div>{{ business.address.split('\n')[1] }}</div>
             </a>
           </div>
-          
-          <div v-if="business.phone" class="mb-2">
-            <i class="fas fa-phone text-blue-400 mr-2"></i>
-            <a
-              :href="business.phoneUrl"
-              class="text-blue-400 hover:underline"
-            >
+        </div>
+        
+        <!-- Phone with phone icon -->
+        <div class="mb-2 flex">
+          <i class="fas fa-phone text-blue-400 w-6 mt-1"></i>
+          <div>
+            <template v-if="business.phone === 'Phone number not available' || !business.phoneUrl">
+              {{ business.phone }}
+            </template>
+            <a v-else :href="business.phoneUrl" class="text-pink-300 hover:underline">
               {{ business.phone }}
             </a>
           </div>
-          
-          <div v-if="business.website" class="mb-2">
-            <i class="fas fa-globe text-blue-400 mr-2"></i>
-            <a
-              :href="business.website"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="text-blue-400 hover:underline"
-            >
-              Visit Website
+        </div>
+        
+        <!-- Website with globe icon -->
+        <div v-if="business.website" class="mb-2 flex">
+          <i class="fas fa-globe text-blue-400 w-6 mt-1"></i>
+          <div>
+            <template v-if="business.website === 'n/a'">
+              {{ business.website }}
+            </template>
+            <a v-else :href="business.website" target="_blank" class="text-pink-300 hover:underline break-all">
+              {{ business.website }}
+            </a>
+          </div>
+        </div>
+        
+        <!-- CoC Page as a simple hyperlink -->
+        <div class="flex">
+          <i class="fas fa-building text-blue-400 w-6 mt-1"></i>
+          <div>
+            <a :href="business.cocPageUrl" target="_blank" class="text-pink-300 hover:underline">
+              CoC Page
             </a>
           </div>
         </div>
@@ -108,9 +122,9 @@
 </template>
 
 <script>
-import axios from 'axios';
-import { load } from 'cheerio';
-import config from '../config.js';
+import axios from "axios";
+import * as cheerio from "cheerio";
+import config from "../config.js"; // Import the config
 
 export default {
   name: 'BusinessScraperHB',
@@ -155,7 +169,7 @@ export default {
       }
     },
     parseBusinesses(html) {
-      const $ = load(html);
+      const $ = cheerio.load(html);
       const businesses = [];
       
       const selectors = this.cityConfig.selectors;
@@ -167,8 +181,9 @@ export default {
         const nameElement = $element.find(selectors.businessName);
         const name = nameElement.text().trim();
         
-        // Extract business URL
+        // Extract business URL for CoC page
         const businessUrl = nameElement.attr('href');
+        const cocPageUrl = businessUrl ? (businessUrl.startsWith('http') ? businessUrl : `${this.cityConfig.baseUrl}${businessUrl}`) : '#';
         
         // Extract address components
         const addressElement = $element.find(selectors.addressElement);
@@ -182,7 +197,7 @@ export default {
           const cityStateZip = cityStateZipElement.text().trim();
           
           if (street && cityStateZip) {
-            address = `${street}, ${cityStateZip}`;
+            address = `${street}\n${cityStateZip}`;
           } else {
             address = addressElement.text().trim();
           }
@@ -198,20 +213,29 @@ export default {
           phoneUrl = phoneElement.attr('href') || `tel:${phone.replace(/\D/g, '')}`;
         }
         
+        // Set default values for missing information
+        if (!phone) {
+          phone = 'Phone number not available';
+          phoneUrl = '';
+        }
+        
+        if (!address) {
+          address = 'Address not available';
+        }
+        
         // Create Google Maps URL with business name for better search results
-        const mapUrl = address ? 
+        const mapUrl = address !== 'Address not available' ? 
           `https://www.google.com/maps/search/${encodeURIComponent(name + ' ' + address)}` :
           '';
         
         if (name) {
           businesses.push({
-            id: index + 1,
             name,
             address,
             phone,
             phoneUrl,
             mapUrl,
-            url: businessUrl ? (businessUrl.startsWith('http') ? businessUrl : `${this.cityConfig.baseUrl}${businessUrl}`) : null,
+            cocPageUrl,
             website: null // Will be populated if we add website parsing
           });
         }

@@ -6,12 +6,12 @@
       <component :is="activeComponent"></component>
       
       <!-- Tabs moved down, now rendered after the component -->
-      <div class="w-full max-w-md mt-4 flex justify-center space-x-3">
+      <div class="w-full max-w-md mt-4 flex flex-wrap justify-center gap-2 px-4">
         <button 
           v-for="city in cities"
           :key="city.id"
           @click="activeComponent = city.component" 
-          class="font-bold py-1 px-3 rounded text-sm transition-opacity duration-200"
+          class="font-bold py-2 px-4 rounded text-sm transition-opacity duration-200 flex-shrink-0 min-w-0"
           :class="activeComponent === city.component 
             ? 'bg-blue-500 hover:bg-blue-700 text-white opacity-100' 
             : 'bg-blue-500 hover:bg-blue-700 text-white opacity-50'"

@@ -1,5 +1,10 @@
 <template>
   <div class="flex flex-col bg-gray-800">
+    <!-- Favicon Icon - centered above main content -->
+    <div class="flex justify-center pt-8 pb-4">
+      <img src="../assets/favicon/favicon.svg" alt="COC Scraper" style="width: 216px;" />
+    </div>
+    
     <!-- Header -->
     <div
       v-if="businesses.length"

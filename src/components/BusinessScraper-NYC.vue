@@ -1,90 +1,129 @@
 <template>
-  <div class="bg-white shadow-lg rounded-lg p-6 max-w-md mx-auto">
-    <h2 class="text-2xl font-bold text-gray-800 mb-6 text-center">New York Chamber of Commerce</h2>
+  <div class="flex flex-col bg-gray-800">
+    <!-- Favicon Icon - centered above main content -->
+    <div class="flex justify-center pt-8 pb-4">
+      <img src="../assets/favicon/favicon.svg" alt="COC Scraper" style="width: 216px;" />
+    </div>
     
-    <!-- Search Input -->
-    <div class="mb-6">
+    <!-- Header -->
+    <div
+      v-if="businesses.length"
+      class="w-full bg-gray-700 text-white flex items-center justify-between px-4 py-2 sticky top-0 z-10 shadow-md"
+    >
+      <button
+        @click="resetSearch"
+        class="text-blue-400 hover:underline text-sm"
+      >
+        ← Back
+      </button>
+      <h2 class="text-sm font-bold text-center">
+        Results for "{{ searchTerm }}" ({{ businesses.length }} businesses)
+      </h2>
+      <div></div> <!-- Empty div to balance the layout -->
+    </div>
+
+    <!-- Search Module -->
+    <div
+      v-if="!businesses.length"
+      class="w-72 p-4 bg-gray-700 rounded shadow-md m-auto" 
+    >
+      <h1 class="text-xl font-bold text-blue-400 mb-4 text-center">COC Scraper</h1>
       <input
         v-model="searchTerm"
         type="text"
-        placeholder="Search for businesses..."
-        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+        placeholder="Enter search term"
+        class="border border-gray-700 p-2 w-full mb-4 bg-gray-600 text-white rounded"
+        @keyup.enter="fetchBusinesses"
       />
-    </div>
-
-    <!-- Search Button -->
-    <div class="mb-6">
       <button
-        @click="searchBusinesses"
-        :disabled="isLoading"
-        class="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        @click="fetchBusinesses"
+        :disabled="loading"
+        class="bg-blue-500 text-white px-4 py-2 rounded w-full hover:bg-blue-600"
       >
-        {{ isLoading ? 'Searching...' : 'Search Businesses' }}
+        Search
       </button>
+      <div v-if="loading" class="mt-4 text-center text-white">Loading...</div>
+      <div v-if="error" class="mt-4 text-center text-red-500">{{ error }}</div>
     </div>
 
-    <!-- Error Message -->
-    <div v-if="error" class="mb-4 p-3 bg-red-100 border border-red-300 rounded-lg">
-      <p class="text-red-700">{{ error }}</p>
-    </div>
-
-    <!-- Results -->
-    <div v-if="businesses.length > 0" class="space-y-4">
-      <h3 class="text-lg font-semibold text-gray-700 mb-4">Search Results:</h3>
-      
-      <div v-for="business in businesses" :key="business.name" class="p-4 border border-gray-200 rounded-lg bg-gray-50">
-        <div class="flex items-center mb-2">
-          <i class="fas fa-building text-blue-600 mr-2"></i>
-          <h4 class="font-semibold text-gray-800">{{ business.name }}</h4>
+    <!-- Search Results -->
+    <div
+      v-if="businesses.length"
+      class="w-full max-w-6xl p-4 grid gap-4 mx-auto"
+      :class="{
+        'grid-cols-1': windowWidth < 768,
+        'grid-cols-3': windowWidth >= 768,
+      }"
+    >
+      <div
+        v-for="business in businesses"
+        :key="business.name"
+        class="p-4 border border-gray-700 rounded bg-gray-600 text-white"
+      >
+        <!-- Business Name - larger and bold, white color -->
+        <p class="text-lg font-bold text-white mb-2">{{ business.name }}</p>
+        
+        <!-- Address with map icon -->
+        <div v-if="business.address" class="mb-2 flex">
+          <i class="fas fa-map-marker-alt text-blue-400 w-6 mt-1"></i>
+          <div class="flex flex-col">
+            <a :href="getGoogleMapsUrl(business.name, business.address)" 
+               target="_blank" 
+               rel="noopener noreferrer" 
+               class="text-pink-300 hover:underline">
+              <div>{{ business.address.split('\n')[0] }}</div>
+              <div>{{ business.address.split('\n')[1] }}</div>
+            </a>
+          </div>
         </div>
         
-        <div v-if="business.contactPerson" class="flex items-center mb-2">
-          <i class="fas fa-user text-gray-600 mr-2"></i>
-          <span class="text-gray-700">{{ business.contactPerson }}</span>
+        <!-- Phone with phone icon -->
+        <div v-if="business.phone" class="mb-2 flex">
+          <i class="fas fa-phone text-blue-400 w-6 mt-1"></i>
+          <div>
+            <a :href="'tel:' + business.phone.replace(/\D/g, '')" 
+               class="text-pink-300 hover:underline">
+              {{ business.phone }}
+            </a>
+          </div>
         </div>
         
-        <div v-if="business.phone" class="flex items-center mb-2">
-          <i class="fas fa-phone text-blue-600 mr-2"></i>
-          <a :href="'tel:' + business.phone.replace(/\D/g, '')" 
-             class="text-pink-600 hover:text-pink-800 font-medium">
-            {{ business.phone }}
-          </a>
+        <!-- Website with globe icon -->
+        <div v-if="business.website" class="mb-2 flex">
+          <i class="fas fa-globe text-blue-400 w-6 mt-1"></i>
+          <div>
+            <a :href="business.website" 
+               target="_blank" 
+               rel="noopener noreferrer" 
+               class="text-pink-300 hover:underline break-all">
+              {{ business.website }}
+            </a>
+          </div>
         </div>
         
-        <div v-if="business.website" class="flex items-center mb-2">
-          <i class="fas fa-globe text-blue-600 mr-2"></i>
-          <a :href="business.website" 
-             target="_blank" 
-             rel="noopener noreferrer" 
-             class="text-pink-600 hover:text-pink-800 font-medium">
-            Visit Website
-          </a>
+        <!-- Contact Person with user icon -->
+        <div v-if="business.contactPerson" class="mb-2 flex">
+          <i class="fas fa-user text-blue-400 w-6 mt-1"></i>
+          <div class="text-gray-300">{{ business.contactPerson }}</div>
         </div>
         
-        <div v-if="business.address" class="flex items-center mb-2">
-          <i class="fas fa-map-marker-alt text-blue-600 mr-2"></i>
-          <a :href="getGoogleMapsUrl(business.name, business.address)" 
-             target="_blank" 
-             rel="noopener noreferrer" 
-             class="text-pink-600 hover:text-pink-800 font-medium">
-            {{ business.address }}
-          </a>
-        </div>
-        
-        <div v-if="business.chamberUrl" class="flex items-center">
-          <i class="fas fa-external-link-alt text-blue-600 mr-2"></i>
-          <a :href="business.chamberUrl" 
-             target="_blank" 
-             rel="noopener noreferrer" 
-             class="text-pink-600 hover:text-pink-800 font-medium">
-            View Chamber Profile
-          </a>
+        <!-- CoC Page as a simple hyperlink -->
+        <div v-if="business.chamberUrl" class="flex">
+          <i class="fas fa-building text-blue-400 w-6 mt-1"></i>
+          <div>
+            <a :href="business.chamberUrl" 
+               target="_blank" 
+               rel="noopener noreferrer" 
+               class="text-pink-300 hover:underline">
+              CoC Page
+            </a>
+          </div>
         </div>
       </div>
     </div>
 
     <!-- No Results Message -->
-    <div v-else-if="!isLoading && searchTerm && businesses.length === 0" class="text-center text-gray-500 py-4">
+    <div v-else-if="!loading && searchTerm && businesses.length === 0" class="text-center text-gray-400 py-4">
       No businesses found for "{{ searchTerm }}"
     </div>
   </div>
@@ -101,16 +140,32 @@ export default {
     return {
       searchTerm: '',
       businesses: [],
-      isLoading: false,
+      loading: false,
       error: null,
-      cityConfig: getCityConfig('new-york')
+      cityConfig: getCityConfig('new-york'),
+      windowWidth: window.innerWidth
     };
   },
+  mounted() {
+    window.addEventListener('resize', this.handleResize);
+  },
+  beforeUnmount() {
+    window.removeEventListener('resize', this.handleResize);
+  },
   methods: {
-    async searchBusinesses() {
+    handleResize() {
+      this.windowWidth = window.innerWidth;
+    },
+    resetSearch() {
+      this.searchTerm = '';
+      this.businesses = [];
+      this.error = null;
+    },
+
+    async fetchBusinesses() {
       if (!this.searchTerm.trim()) return;
 
-      this.isLoading = true;
+      this.loading = true;
       this.error = null;
       this.businesses = [];
 
@@ -124,15 +179,15 @@ export default {
         console.error('Search error:', err);
         this.error = 'Failed to search businesses. Please try again.';
       } finally {
-        this.isLoading = false;
+        this.loading = false;
       }
     },
 
     async fetchWithProxy(url) {
       const proxies = [
+        'https://api.allorigins.win/get?url=',
         'https://corsproxy.io/?',
-        'https://api.allorigins.win/raw?url=',
-        'https://cors-anywhere.herokuapp.com/'
+        'https://api.codetabs.com/v1/proxy?quest='
       ];
 
       for (const proxy of proxies) {
@@ -141,13 +196,16 @@ export default {
           console.log(`Trying proxy: ${proxyUrl}`);
           
           const response = await axios.get(proxyUrl, {
-            timeout: 10000,
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            }
+            timeout: 15000
           });
           
           console.log(`Success with proxy: ${proxy}`);
+          
+          // Handle different proxy response formats
+          if (proxy.includes('allorigins.win/get')) {
+            return { data: response.data.contents };
+          }
+          
           return response;
         } catch (err) {
           console.log(`Proxy failed: ${proxy}`, err.message);
@@ -161,17 +219,38 @@ export default {
     parseBusinesses(html) {
       const $ = cheerio.load(html);
       const businesses = [];
+      const businessNames = new Set(); // Track unique business names
 
       console.log('Parsing HTML for businesses...');
+      console.log('HTML length:', html.length);
+      console.log('HTML sample (first 500 chars):', html.substring(0, 500));
       
-      // NYC Chamber has a different structure - look for business entries
-      $('div').each((index, element) => {
+      // Debug: Check what we actually got
+      const totalDivs = $('div').length;
+      const divsWithH3 = $('div').filter((i, el) => $(el).find('h3').length > 0).length;
+      const h3Count = $('h3').length;
+      
+      console.log(`Total divs: ${totalDivs}, Divs with h3: ${divsWithH3}, Total h3s: ${h3Count}`);
+      
+      // Check for the specific selector you mentioned
+      const specificDiv = $('div.bg-gray-600:nth-child(2)');
+      console.log(`Found divs matching 'div.bg-gray-600:nth-child(2)': ${specificDiv.length}`);
+      if (specificDiv.length > 0) {
+        console.log('Content of specific div:', specificDiv.first().html());
+      }
+      
+      // Look for more specific business container selectors
+      $('div[class*="business"], div[class*="member"], div[class*="directory"], div[class*="listing"], div.bg-gray-600:nth-child(2)').each((index, element) => {
         const $element = $(element);
         const h3 = $element.find('h3').first();
         
         if (h3.length > 0) {
           const name = h3.text().trim();
-          if (name && name.length > 0) {
+          console.log(`Found business candidate: "${name}"`);
+          
+          if (name && name.length > 0 && !businessNames.has(name)) {
+            businessNames.add(name); // Prevent duplicates
+            
             const business = {
               name: name,
               contactPerson: null,
@@ -181,28 +260,22 @@ export default {
               chamberUrl: null
             };
 
-            // Look for contact person, phone, and address in subsequent paragraphs
             $element.find('p').each((i, p) => {
               const text = $(p).text().trim();
               
-              // Skip empty paragraphs
               if (!text) return;
               
-              // Phone number detection (contains digits and common phone patterns)
               if (text.match(/\d{3}[-.\s]?\d{3}[-.\s]?\d{4}|\(\d{3}\)\s?\d{3}[-.\s]?\d{4}/)) {
                 business.phone = text;
               }
-              // Address detection (contains street patterns)
               else if (text.match(/\d+\s+[A-Za-z\s]+(?:Street|St|Avenue|Ave|Road|Rd|Drive|Dr|Boulevard|Blvd|Lane|Ln|Way|Place|Pl|Court|Ct)/i)) {
                 business.address = text;
               }
-              // Contact person (if not phone or address, likely a person's name)
               else if (!business.contactPerson && text.match(/[A-Za-z\s]{3,}/) && !text.includes('http')) {
                 business.contactPerson = text;
               }
             });
 
-            // Look for website links
             $element.find('a[href^="http"]').each((i, link) => {
               const href = $(link).attr('href');
               if (href && !href.includes('chamber.nyc')) {
@@ -210,7 +283,6 @@ export default {
               }
             });
 
-            // Add chamber URL if available
             const chamberLink = $element.find('a[href*="chamber.nyc"]').first();
             if (chamberLink.length > 0) {
               business.chamberUrl = chamberLink.attr('href');
@@ -220,6 +292,63 @@ export default {
           }
         }
       });
+
+      // If the specific selector didn't work, fall back to the general div approach but with better filtering
+      if (businesses.length === 0) {
+        console.log('No businesses found with specific selectors, trying general approach...');
+        
+        $('div').each((index, element) => {
+          const $element = $(element);
+          const h3 = $element.find('h3').first();
+          
+          if (h3.length > 0) {
+            const name = h3.text().trim();
+            if (name && name.length > 0 && !businessNames.has(name)) {
+              console.log(`Found business candidate (general): "${name}"`);
+              businessNames.add(name);
+              
+              const business = {
+                name: name,
+                contactPerson: null,
+                phone: null,
+                website: null,
+                address: null,
+                chamberUrl: null
+              };
+
+              $element.find('p').each((i, p) => {
+                const text = $(p).text().trim();
+                
+                if (!text) return;
+                
+                if (text.match(/\d{3}[-.\s]?\d{3}[-.\s]?\d{4}|\(\d{3}\)\s?\d{3}[-.\s]?\d{4}/)) {
+                  business.phone = text;
+                }
+                else if (text.match(/\d+\s+[A-Za-z\s]+(?:Street|St|Avenue|Ave|Road|Rd|Drive|Dr|Boulevard|Blvd|Lane|Ln|Way|Place|Pl|Court|Ct)/i)) {
+                  business.address = text;
+                }
+                else if (!business.contactPerson && text.match(/[A-Za-z\s]{3,}/) && !text.includes('http')) {
+                  business.contactPerson = text;
+                }
+              });
+
+              $element.find('a[href^="http"]').each((i, link) => {
+                const href = $(link).attr('href');
+                if (href && !href.includes('chamber.nyc')) {
+                  business.website = href;
+                }
+              });
+
+              const chamberLink = $element.find('a[href*="chamber.nyc"]').first();
+              if (chamberLink.length > 0) {
+                business.chamberUrl = chamberLink.attr('href');
+              }
+
+              businesses.push(business);
+            }
+          }
+        });
+      }
 
       console.log(`Found ${businesses.length} businesses`);
       this.businesses = businesses;
@@ -234,5 +363,4 @@ export default {
 </script>
 
 <style scoped>
-/* Component-specific styles if needed */
 </style>

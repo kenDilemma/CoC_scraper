@@ -8,7 +8,7 @@
     <!-- Header -->
     <div
       v-if="businesses.length"
-      class="w-full bg-gray-700 text-white flex items-center justify-between px-4 py-2 sticky top-0 z-10 shadow-md"
+      class="w-full bg-gray-700 text-white flex  justify-between px-4 py-2 sticky top-0 z-10 shadow-md"
     >
       <button
         @click="resetSearch"

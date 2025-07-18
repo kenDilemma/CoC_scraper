@@ -6,24 +6,17 @@
       <component :is="activeComponent"></component>
       
       <!-- Tabs moved down, now rendered after the component -->
-      <div class="w-72 mt-4 flex justify-center space-x-3">
+      <div class="w-full max-w-md mt-4 flex justify-center space-x-3">
         <button 
-          @click="activeComponent = 'wilmington'" 
+          v-for="city in cities"
+          :key="city.id"
+          @click="activeComponent = city.component" 
           class="font-bold py-1 px-3 rounded text-sm transition-opacity duration-200"
-          :class="activeComponent === 'wilmington' 
+          :class="activeComponent === city.component 
             ? 'bg-blue-500 hover:bg-blue-700 text-white opacity-100' 
             : 'bg-blue-500 hover:bg-blue-700 text-white opacity-50'"
         >
-          Wilmington
-        </button>
-        <button 
-          @click="activeComponent = 'dayton'" 
-          class="font-bold py-1 px-3 rounded text-sm transition-opacity duration-200"
-          :class="activeComponent === 'dayton' 
-            ? 'bg-blue-500 hover:bg-blue-700 text-white opacity-100' 
-            : 'bg-blue-500 hover:bg-blue-700 text-white opacity-50'"
-        >
-          Dayton
+          {{ city.name }}
         </button>
       </div>
     </main>
@@ -33,15 +26,23 @@
 <script>
 import Wilmington from './components/BusinessScraper.vue'
 import Dayton from './components/BusinessScraper-DYT.vue'
+import HuntingtonBeach from './components/BusinessScraper-HB.vue'
+import config from './config.js'
 
 export default {
   components: {
     Wilmington,
-    Dayton
+    Dayton,
+    HuntingtonBeach
   },
   data() {
     return {
-      activeComponent: 'wilmington'
+      activeComponent: 'wilmington',
+      cities: [
+        { id: 'wilmington', name: 'Wilmington', component: 'Wilmington' },
+        { id: 'dayton', name: 'Dayton', component: 'Dayton' },
+        { id: 'huntington-beach', name: 'Huntington Beach', component: 'HuntingtonBeach' }
+      ]
     }
   }
 }

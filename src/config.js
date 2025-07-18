@@ -1,9 +1,152 @@
 // Configuration file for the CoC scraper
 // This file contains environment-specific configurations
+import * as cheerio from 'cheerio';
 
 // Function to determine if we're in production (GitHub Pages) or development
 const isProd = () => {
   return import.meta.env.PROD;
+};
+
+// Custom parser for NYC (non-GrowthZone)
+const parseNYCBusinesses = async (html, searchTerm) => {
+  const $ = cheerio.load(html);
+  const businesses = [];
+  const businessNames = new Set();
+
+  console.log('[NYC] Parsing HTML for businesses...');
+  console.log('[NYC] HTML length:', html.length);
+  console.log('[NYC] HTML sample (first 500 chars):', html.substring(0, 500));
+  
+  // Debug: Check what we actually got
+  const totalDivs = $('div').length;
+  const divsWithH3 = $('div').filter((i, el) => $(el).find('h3').length > 0).length;
+  const h3Count = $('h3').length;
+  
+  console.log(`[NYC] Total divs: ${totalDivs}, Divs with h3: ${divsWithH3}, Total h3s: ${h3Count}`);
+  
+  // Look for business container selectors
+  $('div[class*="business"], div[class*="member"], div[class*="directory"], div[class*="listing"], div.bg-gray-600:nth-child(2), div:has(h3)').each((index, element) => {
+    const $element = $(element);
+    const h3 = $element.find('h3').first();
+    
+    if (h3.length > 0) {
+      const name = h3.text().trim();
+      console.log(`[NYC] Found business candidate: "${name}"`);
+      
+      if (name && name.length > 0 && !businessNames.has(name)) {
+        businessNames.add(name);
+        
+        const business = {
+          name: name,
+          address: null,
+          phone: null,
+          website: null,
+          contactPerson: null,
+          email: null,
+          chamberUrl: null,
+          mapUrl: null,
+          phoneUrl: null
+        };
+
+        $element.find('p').each((i, p) => {
+          const text = $(p).text().trim();
+          
+          if (!text) return;
+          
+          if (text.match(/\d{3}[-.\s]?\d{3}[-.\s]?\d{4}|\(\d{3}\)\s?\d{3}[-.\s]?\d{4}/)) {
+            business.phone = text;
+            business.phoneUrl = `tel:${text.replace(/\D/g, '')}`;
+          }
+          else if (text.match(/\d+\s+[A-Za-z\s]+(?:Street|St|Avenue|Ave|Road|Rd|Drive|Dr|Boulevard|Blvd|Lane|Ln|Way|Place|Pl|Court|Ct)/i)) {
+            business.address = text;
+            business.mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name + ' ' + text)}`;
+          }
+          else if (!business.contactPerson && text.match(/[A-Za-z\s]{3,}/) && !text.includes('http')) {
+            business.contactPerson = text;
+          }
+        });
+
+        $element.find('a[href^="http"]').each((i, link) => {
+          const href = $(link).attr('href');
+          if (href && !href.includes('chamber.nyc')) {
+            business.website = href;
+          }
+        });
+
+        const chamberLink = $element.find('a[href*="chamber.nyc"]').first();
+        if (chamberLink.length > 0) {
+          business.chamberUrl = chamberLink.attr('href');
+        }
+
+        businesses.push(business);
+      }
+    }
+  });
+
+  // Fallback: general div approach
+  if (businesses.length === 0) {
+    console.log('[NYC] No businesses found with specific selectors, trying general approach...');
+    
+    $('div').each((index, element) => {
+      const $element = $(element);
+      const h3 = $element.find('h3').first();
+      
+      if (h3.length > 0) {
+        const name = h3.text().trim();
+        if (name && name.length > 0 && !businessNames.has(name)) {
+          businessNames.add(name);
+          
+          const business = {
+            name: name,
+            address: null,
+            phone: null,
+            website: null,
+            contactPerson: null,
+            email: null,
+            chamberUrl: null,
+            mapUrl: null,
+            phoneUrl: null
+          };
+
+          // Same parsing logic as above
+          $element.find('p').each((i, p) => {
+            const text = $(p).text().trim();
+            
+            if (!text) return;
+            
+            if (text.match(/\d{3}[-.\s]?\d{3}[-.\s]?\d{4}|\(\d{3}\)\s?\d{3}[-.\s]?\d{4}/)) {
+              business.phone = text;
+              business.phoneUrl = `tel:${text.replace(/\D/g, '')}`;
+            }
+            else if (text.match(/\d+\s+[A-Za-z\s]+(?:Street|St|Avenue|Ave|Road|Rd|Drive|Dr|Boulevard|Blvd|Lane|Ln|Way|Place|Pl|Court|Ct)/i)) {
+              business.address = text;
+              business.mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name + ' ' + text)}`;
+            }
+            else if (!business.contactPerson && text.match(/[A-Za-z\s]{3,}/) && !text.includes('http')) {
+              business.contactPerson = text;
+            }
+          });
+
+          $element.find('a[href^="http"]').each((i, link) => {
+            const href = $(link).attr('href');
+            if (href && !href.includes('chamber.nyc')) {
+              business.website = href;
+            }
+          });
+
+          const chamberLink = $element.find('a[href*="chamber.nyc"]').first();
+          if (chamberLink.length > 0) {
+            business.chamberUrl = chamberLink.attr('href');
+          }
+
+          businesses.push(business);
+        }
+      }
+    });
+  }
+
+  console.log(`[NYC] Found ${businesses.length} businesses`);
+  return businesses;
 };
 
 const config = {
@@ -70,15 +213,17 @@ const config = {
       baseUrl: 'https://chamber.nyc',
       searchPath: '/business-directory',
       searchParams: (term) => `?search=${encodeURIComponent(term)}`,
-      type: 'nyc-custom', // Different scraping pattern
+      type: 'custom', // Custom parsing
+      customParser: parseNYCBusinesses, // Custom parser function
       selectors: {
+        // These are used for documentation but actual parsing is in customParser
         cardWrapper: 'div:has(h3)',
         businessName: 'h3',
         businessUrl: 'h3',
-        contactPerson: 'p:contains("   ")',
-        phoneElement: 'p:contains("   ")',
+        contactPerson: 'p',
+        phoneElement: 'p',
         websiteElement: 'a[href^="http"]',
-        addressElement: 'p:contains("   ")'
+        addressElement: 'p'
       }
     }
   ],
